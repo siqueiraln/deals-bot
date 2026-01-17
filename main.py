@@ -145,7 +145,14 @@ async def run_bot():
         if manual_links:
             for url in manual_links:
                 try:
-                    deal = await ml_scraper.fetch_product_details(url) if "mercadolivre" in url else await amz_scraper.fetch_product_details(url)
+                    deal = None
+                    if "mercadolivre" in url:
+                        deal = await ml_scraper.fetch_product_details(url)
+                    elif "amazon" in url:
+                        deal = await amz_scraper.fetch_product_details(url)
+                    elif "shopee" in url:
+                        deal = await shp_scraper.fetch_product_details(url)
+
                     if deal: all_deals.append(deal)
                 except: pass
             clear_manual_links()

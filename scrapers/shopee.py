@@ -91,6 +91,52 @@ class ShopeeScraper:
             await browser.close()
         return deals
 
+    async def fetch_product_details(self, url: str) -> Optional[Deal]:
+        """Fetch details for a single Shopee product URL"""
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            )
+            page = await context.new_page()
+            await stealth_async(page)
+
+            try:
+                await page.goto(url, wait_until="networkidle", timeout=60000)
+                # Shopee product page is very dynamic
+                await page.wait_for_selector("div[style='display: contents;']", timeout=20000)
+
+                content = await page.content()
+                soup = BeautifulSoup(content, 'html.parser')
+
+                # Shopee uses very complex/dynamic classes. We look for structural patterns or aria-labels
+                title_el = soup.select_one("div.V637_c") or soup.select_one("span[class*='text-lg font-medium']")
+                title = title_el.get_text(strip=True) if title_el else "No title"
+
+                price_el = soup.select_one(".pq6uht") or soup.select_one("div[class*='text-shopee-primary']")
+                if price_el:
+                    price_text = price_el.get_text(strip=True)
+                    price = float(re.sub(r'[^\d,]', '', price_text).replace(',', '.'))
+                else:
+                    await browser.close()
+                    return None
+
+                img_el = soup.select_one("div.V99v97 img") or soup.select_one("img[class*='pointer-events-none']")
+                image_url = img_el['src'] if img_el else None
+
+                await browser.close()
+                return Deal(
+                    title=title,
+                    price=price,
+                    url=url,
+                    store="Shopee",
+                    image_url=image_url
+                )
+            except Exception as e:
+                print(f"Error fetching Shopee product details: {e}")
+                await browser.close()
+                return None
+
     async def search_keyword(self, keyword: str) -> List[Deal]:
         """Search for a specific keyword on Shopee and return deals"""
         search_url = f"https://shopee.com.br/search?keyword={keyword.replace(' ', '%20')}"
