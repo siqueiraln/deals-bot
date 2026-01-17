@@ -1,0 +1,16 @@
+# Adicione aqui os termos que você quer que o bot busque ativamente.
+# Um por linha.
+iPhone
+PlayStation 5
+Nintendo Switch
+Smart TV 4K
+Air Fryer
+Notebook i5
+Monitor Gamer
+Alexa Echo
+Kindle
+Fone Bluetooth JBL
+Cadeira Gamer
+Lego
+Apple Watch
+Xbox Series S
