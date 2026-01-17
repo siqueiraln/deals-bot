@@ -91,10 +91,17 @@ async def run_bot():
     cycle_count = 0
     total_sent_session = 0
     total_blacklisted_session = 0
+    last_cleanup = datetime.now().date()
 
     while True:
         cycle_count += 1
-        hot_keywords = load_hot_keywords()
+        current_date = datetime.now().date()
+
+        # Manutenção Diária: Limpa ofertas com mais de 15 dias
+        if current_date > last_cleanup:
+            logger.info("Executando manutenção diária do banco de dados...")
+            db.clean_old_deals(days=15)
+            last_cleanup = current_date
         manual_links = load_manual_links()
         blacklist = load_blacklist()
         all_deals = []

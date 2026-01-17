@@ -1,4 +1,5 @@
 import os
+import pyshorteners
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 from dotenv import load_dotenv
 
@@ -9,15 +10,28 @@ class AffiliateLinkGenerator:
         self.amazon_tag = os.getenv("AMAZON_AFFILIATE_TAG", "your-amazon-tag-20")
         self.ml_id = os.getenv("ML_AFFILIATE_ID", "your-ml-id")
         self.shopee_tag = os.getenv("SHOPEE_AFFILIATE_TAG", "your-shopee-tag")
+        self.shortener = pyshorteners.Shortener()
 
-    def generate(self, url: str, store: str) -> str:
+    def generate(self, url: str, store: str, shorten: bool = True) -> str:
+        affiliate_url = url
         if "mercadolivre.com.br" in url or store == "Mercado Livre":
-            return self._generate_ml(url)
+            affiliate_url = self._generate_ml(url)
         elif "amazon.com.br" in url or store == "Amazon":
-            return self._generate_amazon(url)
+            affiliate_url = self._generate_amazon(url)
         elif "shopee.com.br" in url or store == "Shopee":
-            return self._generate_shopee(url)
-        return url
+            affiliate_url = self._generate_shopee(url)
+
+        if shorten:
+            return self._shorten_url(affiliate_url)
+        return affiliate_url
+
+    def _shorten_url(self, url: str) -> str:
+        """Shortens URL using TinyURL (no API key required)"""
+        try:
+            return self.shortener.tinyurl.short(url)
+        except Exception as e:
+            print(f"Error shortening URL: {e}")
+            return url
 
     def _generate_amazon(self, url: str) -> str:
         """Adds affiliate tag to Amazon URL"""
