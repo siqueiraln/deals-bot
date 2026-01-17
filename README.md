@@ -45,17 +45,21 @@ Este bot monitora promoções no Mercado Livre, Amazon e Shopee, e envia automat
    - `ML_AFFILIATE_ID`: Seu ID/parâmetro de afiliado do Mercado Livre.
    - `SHOPEE_AFFILIATE_TAG`: Seu ID de afiliado Shopee.
 
-## 🏃 Como usar
+## 🌟 Novas Funcionalidades
 
-Para iniciar o bot, execute:
+- **Categorização Automática**: O bot identifica o tipo de produto (Smartphone, Games, Casa, etc.) e adiciona #hashtags automaticamente.
+- **Validação de Preço**: O bot agora guarda o último preço enviado. Se o preço do produto não mudou, ele **não envia novamente**, evitando spam. Se o preço cair, ele envia a atualização!
+- **Links Manuais**: Você pode forçar o envio de um produto específico.
 
-```bash
-python main.py
-```
+## ✍️ Como adicionar links manualmente
 
-O bot começará a busca e enviará as promoções novas a cada 30 minutos (configurável no `main.py`).
+1. Abra o arquivo `manual_links.txt`.
+2. Cole o link do Mercado Livre ou Amazon (um por linha).
+3. Salve o arquivo.
+4. O bot processará esses links no início do próximo ciclo e **limpará o arquivo automaticamente**.
 
-## ⚠️ Notas Importantes
+## 📊 Estratégia de Busca
 
-- **Scraping**: Sites como Amazon e Shopee possuem proteções fortes contra robôs. O uso excessivo pode levar ao bloqueio temporário do seu IP. Recomenda-se o uso de Proxies se for rodar em larga escala.
-- **Links de Afiliado**: Este bot usa uma substituição simples de parâmetros de URL. Para maior precisão (especialmente na Shopee), recomenda-se usar as APIs oficiais de afiliados para gerar os links.
+- **Mercado Livre**: Foco total. Busca ativa de todos os termos em `hot_keywords.txt` a cada 30 min.
+- **Amazon**: Busca periódica a cada ~1.5h de termos aleatórios da lista.
+- **Shopee**: Busca periódica a cada ~2h.

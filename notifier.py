@@ -14,7 +14,7 @@ class TelegramNotifier:
         self.chat_id = os.getenv("TELEGRAM_CHAT_ID")
         self.bot = Bot(token=self.token) if self.token else None
 
-    async def send_deal(self, deal: Deal):
+    async def send_deal(self, deal: Deal, hashtags: str = ""):
         if not self.bot or not self.chat_id:
             print(f"Telegram not configured. Deal: {deal.title} - {deal.affiliate_url}")
             return
@@ -34,7 +34,8 @@ class TelegramNotifier:
             message += f"📉 <b>Desconto:</b> {deal.discount_percentage}% OFF\n"
 
         message += (
-            f"\n🏪 <b>Loja:</b> {deal.store}\n\n"
+            f"\n🏪 <b>Loja:</b> {deal.store}\n"
+            f"{hashtags}\n\n"
             f"🔗 <a href='{deal.affiliate_url}'>COMPRAR AGORA</a>"
         )
 

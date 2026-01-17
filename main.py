@@ -25,6 +25,16 @@ ML_FREQUENCY = 1
 AMZ_FREQUENCY = 3
 SHP_FREQUENCY = 4
 
+# Mapeamento de Categorias por Keywords para Hashtags
+CATEGORY_MAP = {
+    "Smartphone": ["iphone", "samsung", "galaxy", "celular", "xiaomi", "motorola", "smartphone"],
+    "Games": ["ps5", "playstation", "xbox", "nintendo", "switch", "gamer", "jogo", "dualshock", "console"],
+    "Informatica": ["notebook", "laptop", "monitor", "teclado", "mouse", "ssd", "ram", "ryzen", "intel", "gpu", "placa de video"],
+    "Casa": ["air fryer", "fritadeira", "aspirador", "cafeteira", "alexa", "echo", "smart", "philips", "geladeira", "fogão"],
+    "Audio": ["fone", "headset", "bluetooth", "jbl", "caixa de som", "som", "earbuds", "galaxy buds", "airpods"],
+    "Moda": ["tenis", "camiseta", "calça", "mochila", "relogio", "apple watch", "casaco"]
+}
+
 def load_hot_keywords():
     if os.path.exists(HOT_KEYWORDS_FILE):
         with open(HOT_KEYWORDS_FILE, "r", encoding="utf-8") as f:
@@ -37,10 +47,27 @@ def load_manual_links():
             return [line.strip() for line in f if line.strip() and not line.startswith("#")]
     return []
 
-async def run_bot():
-    logger.info("Iniciando Bot de Promoções com Prioridade em Mercado Livre...")
+def clear_manual_links():
+    """Limpa o arquivo de links manuais após a leitura para evitar reprocessamento desnecessário"""
+    if os.path.exists(MANUAL_LINKS_FILE):
+        with open(MANUAL_LINKS_FILE, "w", encoding="utf-8") as f:
+            f.write("# Adicione links aqui (serão limpos após o processamento)\n")
 
-    # Instanciando scrapers
+def get_category_hashtags(title: str) -> str:
+    tags = set()
+    title_lower = title.lower()
+    for category, keywords in CATEGORY_MAP.items():
+        if any(k in title_lower for k in keywords):
+            tags.add(f"#{category}")
+
+    if not tags:
+        tags.add("#Oferta")
+
+    return " ".join(list(tags))
+
+async def run_bot():
+    logger.info("Iniciando Bot de Promoções com Prioridade ML e Validação de Preços...")
+
     ml_scraper = MercadoLivreScraper()
     amz_scraper = AmazonScraper()
     shp_scraper = ShopeeScraper()
@@ -59,7 +86,7 @@ async def run_bot():
 
         logger.info(f"--- Iniciando Ciclo #{cycle_count} ---")
 
-        # 0. PROCESSAR LINKS MANUAIS (Sempre em todos os ciclos)
+        # 0. PROCESSAR LINKS MANUAIS
         if manual_links:
             logger.info(f"Processando {len(manual_links)} links manuais...")
             for url in manual_links:
@@ -75,16 +102,18 @@ async def run_bot():
                 except Exception as e:
                     logger.error(f"Erro ao processar link manual {url}: {e}")
 
+            # Limpar arquivo após processar
+            clear_manual_links()
+
         # 1. MERCADO LIVRE (Prioridade Máxima)
         if cycle_count % ML_FREQUENCY == 0:
             logger.info("Executando busca prioritária: Mercado Livre")
             try:
-                # Ofertas gerais do ML
+                # Ofertas gerais
                 deals = await ml_scraper.fetch_deals()
                 all_deals.extend([d for d in deals if (d.discount_percentage or 0) >= MIN_DISCOUNT_GENERAL])
 
                 # Busca ativa de TODAS as keywords no ML
-                logger.info(f"Buscando {len(hot_keywords)} termos prioritários no ML...")
                 for keyword in hot_keywords:
                     priority_deals = await ml_scraper.search_keyword(keyword)
                     all_deals.extend(priority_deals)
@@ -115,12 +144,16 @@ async def run_bot():
             except Exception as e:
                 logger.error(f"Erro na Shopee: {e}")
 
-        # 4. Processar e Notificar
+        # 4. Processar, Validar e Notificar
         if not all_deals:
-            logger.info("Nenhuma oferta encontrada neste ciclo.")
+            logger.info("Nenhuma oferta qualificada encontrada neste ciclo.")
         else:
-            # Remover duplicatas por URL
-            unique_deals = {d.url: d for d in all_deals}
+            # Remover duplicatas por URL mantendo a de maior desconto se houver
+            unique_deals = {}
+            for d in all_deals:
+                if d.url not in unique_deals or (d.discount_percentage or 0) > (unique_deals[d.url].discount_percentage or 0):
+                    unique_deals[d.url] = d
+
             final_list = list(unique_deals.values())
 
             # Ordenar: Keywords quentes primeiro, depois maiores descontos
@@ -130,23 +163,27 @@ async def run_bot():
                 return (is_hot, discount)
 
             final_list.sort(key=priority_score, reverse=True)
-            logger.info(f"Total de {len(final_list)} ofertas únicas para processar.")
+            logger.info(f"Total de {len(final_list)} ofertas únicas para validar.")
 
             new_deals_count = 0
             for deal in final_list:
-                # VALIDAÇÃO: Só envia se for novo OU se o preço mudou
+                # VALIDAÇÃO: Só envia se for novo OU se o preço caiu/mudou
                 if db.is_deal_sent(deal.url, deal.price):
                     continue
 
-                # Gerar link de afiliado e notificar
+                # Gerar link de afiliado e hashtags
                 deal.affiliate_url = affiliate_gen.generate(deal.url, deal.store)
-                await notifier.send_deal(deal)
+                hashtags = get_category_hashtags(deal.title)
 
+                # Notificar via Telegram
+                await notifier.send_deal(deal, hashtags)
+
+                # Salvar no Banco de Dados
                 db.add_sent_deal(deal)
                 new_deals_count += 1
-                await asyncio.sleep(5) # Delay entre mensagens no Telegram
+                await asyncio.sleep(5) # Delay anti-spam no Telegram
 
-            logger.info(f"Enviadas {new_deals_count} novas promoções.")
+            logger.info(f"Enviadas {new_deals_count} novas promoções após validação.")
 
         logger.info("Ciclo finalizado. Aguardando 30 minutos...")
         await asyncio.sleep(1800)
