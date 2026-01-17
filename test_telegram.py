@@ -28,8 +28,8 @@ async def test_telegram():
         print("Enviando mensagem de teste...")
         await bot.send_message(
             chat_id=chat_id,
-            text="✅ *Bot de Promoções Configurado!*\n\nSe você recebeu esta mensagem, as suas credenciais do Telegram estão funcionando corretamente.",
-            parse_mode=ParseMode.MARKDOWN
+            text="✅ <b>Bot de Promoções Configurado!</b>\n\nSe você recebeu esta mensagem, as suas credenciais do Telegram estão funcionando corretamente.",
+            parse_mode=ParseMode.HTML
         )
         print("SUCESSO: Mensagem enviada com sucesso!")
     except Exception as e:

@@ -1,1 +1,18 @@
-/.env.example
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+
+# Environment
+.env
+
+# Database & Logs
+*.db
+sent_deals.json
+logs/
+
+# Playwright
+.playwright/
+ms-playwright/
