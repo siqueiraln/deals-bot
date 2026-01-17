@@ -45,11 +45,22 @@ Este bot monitora promoções no Mercado Livre, Amazon e Shopee, e envia automat
    - `ML_AFFILIATE_ID`: Seu ID/parâmetro de afiliado do Mercado Livre.
    - `SHOPEE_AFFILIATE_TAG`: Seu ID de afiliado Shopee.
 
-## 🌟 Novas Funcionalidades
+## 🎮 Comandos do Telegram (Dashboard)
 
-- **Categorização Automática**: O bot identifica o tipo de produto (Smartphone, Games, Casa, etc.) e adiciona #hashtags automaticamente.
-- **Validação de Preço**: O bot agora guarda o último preço enviado. Se o preço do produto não mudou, ele **não envia novamente**, evitando spam. Se o preço cair, ele envia a atualização!
-- **Links Manuais**: Você pode forçar o envio de um produto específico.
+Agora você pode controlar o bot diretamente pelo chat:
+
+- **Colar um Link**: Basta colar um link do ML ou Amazon no chat e o bot agendará a postagem.
+- **`/status`**: Veja se o bot está online e o total de produtos monitorados.
+- **`/hot [termo]`**: Adiciona uma palavra-chave para busca ativa prioritária.
+- **`/block [termo]`**: Adiciona uma palavra à blacklist para nunca ser postada.
+- **`/add [link]`**: Outra forma de adicionar links manuais.
+
+## 🌟 Outras Funcionalidades
+
+- **Encurtador de Links**: Todos os links são automaticamente encurtados via TinyURL.
+- **Categorização Automática**: Identifica produtos e adiciona #hashtags.
+- **Manutenção Automática**: Limpa o banco de dados de ofertas com mais de 15 dias para manter a performance.
+- **Blacklist**: Filtro de palavras para evitar itens indesejados.
 
 ## ✍️ Como adicionar links manualmente
 
