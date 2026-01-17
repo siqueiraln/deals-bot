@@ -1,0 +1,3 @@
+# Adicione aqui links manuais (um por linha)
+# O bot vai tentar extrair os dados e aplicar seu link de afiliado.
+# Exemplo: https://www.mercadolivre.com.br/produto-exemplo

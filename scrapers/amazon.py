@@ -98,6 +98,53 @@ class AmazonScraper:
             await browser.close()
         return deals
 
+    async def fetch_product_details(self, url: str) -> Optional[Deal]:
+        """Fetch details for a single Amazon product URL"""
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            )
+            page = await context.new_page()
+            await stealth_async(page)
+
+            try:
+                await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                await page.wait_for_selector("#productTitle", timeout=15000)
+
+                content = await page.content()
+                soup = BeautifulSoup(content, 'html.parser')
+
+                title_el = soup.select_one("#productTitle")
+                title = title_el.get_text(strip=True) if title_el else "No title"
+
+                price_whole = soup.select_one(".a-price-whole")
+                price_fraction = soup.select_one(".a-price-fraction")
+                if price_whole:
+                    price_str = price_whole.get_text(strip=True).replace('.', '').replace(',', '.')
+                    if price_fraction:
+                        price_str += price_fraction.get_text(strip=True)
+                    price = float(re.sub(r'[^\d.]', '', price_str))
+                else:
+                    await browser.close()
+                    return None
+
+                img_el = soup.select_one("#landingImage")
+                image_url = img_el['src'] if img_el else None
+
+                await browser.close()
+                return Deal(
+                    title=title,
+                    price=price,
+                    url=url,
+                    store="Amazon",
+                    image_url=image_url
+                )
+            except Exception as e:
+                print(f"Error fetching Amazon product details: {e}")
+                await browser.close()
+                return None
+
     async def search_keyword(self, keyword: str) -> List[Deal]:
         """Search for a specific keyword on Amazon and return deals"""
         search_url = f"https://www.amazon.com.br/s?k={keyword.replace(' ', '+')}"

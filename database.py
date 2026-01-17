@@ -21,11 +21,33 @@ class Database:
             """)
             conn.commit()
 
-    def is_deal_sent(self, url: str) -> bool:
+    def get_last_price(self, url: str) -> float:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT 1 FROM sent_deals WHERE url = ?", (url,))
-            return cursor.fetchone() is not None
+            cursor.execute("SELECT price FROM sent_deals WHERE url = ?", (url,))
+            result = cursor.fetchone()
+            return result[0] if result else None
+
+    def is_deal_sent(self, url: str, current_price: float = None) -> bool:
+        """
+        Checks if deal was sent.
+        If current_price is provided, returns True only if the price is the same.
+        Returns False if the price changed (indicating a new opportunity).
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT price FROM sent_deals WHERE url = ?", (url,))
+            result = cursor.fetchone()
+
+            if result is None:
+                return False
+
+            if current_price is not None:
+                last_price = result[0]
+                # If price is the same, we don't want to send it again
+                return abs(last_price - current_price) < 0.01
+
+            return True
 
     def add_sent_deal(self, deal: Deal):
         with sqlite3.connect(self.db_path) as conn:

@@ -18,9 +18,9 @@ load_dotenv()
 # Configurações de Filtro
 MIN_DISCOUNT_GENERAL = 20  # % mínimo para produtos gerais
 HOT_KEYWORDS_FILE = "hot_keywords.txt"
+MANUAL_LINKS_FILE = "manual_links.txt"
 
 # Configurações de Frequência (Ciclos de ~30 min cada)
-# Ex: ML roda todo ciclo (1), Amazon a cada 3 ciclos (~1.5h), Shopee a cada 4 (~2h)
 ML_FREQUENCY = 1
 AMZ_FREQUENCY = 3
 SHP_FREQUENCY = 4
@@ -28,6 +28,12 @@ SHP_FREQUENCY = 4
 def load_hot_keywords():
     if os.path.exists(HOT_KEYWORDS_FILE):
         with open(HOT_KEYWORDS_FILE, "r", encoding="utf-8") as f:
+            return [line.strip() for line in f if line.strip() and not line.startswith("#")]
+    return []
+
+def load_manual_links():
+    if os.path.exists(MANUAL_LINKS_FILE):
+        with open(MANUAL_LINKS_FILE, "r", encoding="utf-8") as f:
             return [line.strip() for line in f if line.strip() and not line.startswith("#")]
     return []
 
@@ -48,9 +54,26 @@ async def run_bot():
     while True:
         cycle_count += 1
         hot_keywords = load_hot_keywords()
+        manual_links = load_manual_links()
         all_deals = []
 
         logger.info(f"--- Iniciando Ciclo #{cycle_count} ---")
+
+        # 0. PROCESSAR LINKS MANUAIS (Sempre em todos os ciclos)
+        if manual_links:
+            logger.info(f"Processando {len(manual_links)} links manuais...")
+            for url in manual_links:
+                try:
+                    deal = None
+                    if "mercadolivre.com.br" in url:
+                        deal = await ml_scraper.fetch_product_details(url)
+                    elif "amazon.com.br" in url:
+                        deal = await amz_scraper.fetch_product_details(url)
+
+                    if deal:
+                        all_deals.append(deal)
+                except Exception as e:
+                    logger.error(f"Erro ao processar link manual {url}: {e}")
 
         # 1. MERCADO LIVRE (Prioridade Máxima)
         if cycle_count % ML_FREQUENCY == 0:
@@ -76,7 +99,6 @@ async def run_bot():
                 deals = await amz_scraper.fetch_deals()
                 all_deals.extend([d for d in deals if (d.discount_percentage or 0) >= MIN_DISCOUNT_GENERAL])
 
-                # Busca apenas uma keyword aleatória para economizar recursos
                 if hot_keywords:
                     keyword = random.choice(hot_keywords)
                     priority_deals = await amz_scraper.search_keyword(keyword)
@@ -90,16 +112,10 @@ async def run_bot():
             try:
                 deals = await shp_scraper.fetch_deals()
                 all_deals.extend([d for d in deals if (d.discount_percentage or 0) >= MIN_DISCOUNT_GENERAL])
-
-                # Busca apenas uma keyword aleatória na Shopee
-                if hot_keywords:
-                    keyword = random.choice(hot_keywords)
-                    priority_deals = await shp_scraper.search_keyword(keyword)
-                    all_deals.extend(priority_deals)
             except Exception as e:
                 logger.error(f"Erro na Shopee: {e}")
 
-        # 4. Processar e Priorizar
+        # 4. Processar e Notificar
         if not all_deals:
             logger.info("Nenhuma oferta encontrada neste ciclo.")
         else:
@@ -118,7 +134,8 @@ async def run_bot():
 
             new_deals_count = 0
             for deal in final_list:
-                if db.is_deal_sent(deal.url):
+                # VALIDAÇÃO: Só envia se for novo OU se o preço mudou
+                if db.is_deal_sent(deal.url, deal.price):
                     continue
 
                 # Gerar link de afiliado e notificar

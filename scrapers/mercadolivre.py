@@ -121,6 +121,59 @@ class MercadoLivreScraper:
             await browser.close()
         return deals
 
+    async def fetch_product_details(self, url: str) -> Optional[Deal]:
+        """Fetch details for a single product URL"""
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            page = await browser.new_page()
+            await page.set_extra_http_headers({
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
+            })
+
+            try:
+                await page.goto(url, wait_until="networkidle")
+                content = await page.content()
+                soup = BeautifulSoup(content, 'html.parser')
+
+                title_el = soup.select_one(".ui-pdp-title")
+                title = title_el.get_text(strip=True) if title_el else "No title"
+
+                price_container = soup.select_one(".andes-money-amount--current")
+                if price_container:
+                    fraction = price_container.select_one(".andes-money-amount__fraction")
+                    cents = price_container.select_one(".andes-money-amount__cents")
+                    price_str = fraction.get_text(strip=True).replace(".", "") if fraction else "0"
+                    if cents:
+                        price_str += "." + cents.get_text(strip=True)
+                    price = float(price_str)
+                else:
+                    await browser.close()
+                    return None
+
+                discount_el = soup.select_one(".andes-money-amount__discount")
+                discount = None
+                if discount_el:
+                    discount_text = discount_el.get_text(strip=True)
+                    discount_match = re.search(r'(\d+)%', discount_text)
+                    discount = int(discount_match.group(1)) if discount_match else None
+
+                img_el = soup.select_one(".ui-pdp-gallery__figure img")
+                image_url = img_el.get('src') or img_el.get('data-src') if img_el else None
+
+                await browser.close()
+                return Deal(
+                    title=title,
+                    price=price,
+                    discount_percentage=discount,
+                    url=url,
+                    store="Mercado Livre",
+                    image_url=image_url
+                )
+            except Exception as e:
+                print(f"Error fetching ML product details: {e}")
+                await browser.close()
+                return None
+
     async def search_keyword(self, keyword: str) -> List[Deal]:
         """Search for a specific keyword and return deals (items with discounts)"""
         search_url = f"https://lista.mercadolivre.com.br/{keyword.replace(' ', '-')}_OrderId_PRICE_ASC"
