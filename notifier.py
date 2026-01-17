@@ -56,6 +56,25 @@ class TelegramNotifier:
             print(f"Sent deal to Telegram: {deal.title}")
         except Exception as e:
             print(f"Error sending to Telegram: {e}")
-            # If it fails even with HTML, log the error clearly
-            if "can't parse" in str(e).lower():
-                print("HTML Parsing Error. Check if affiliate_url is valid.")
+    async def send_status_report(self, stats: dict):
+        if not self.bot or not self.chat_id:
+            return
+
+        report = (
+            "📊 <b>Relatório de Atividade do Bot</b>\n\n"
+            f"🔄 <b>Ciclos executados:</b> {stats.get('cycles', 0)}\n"
+            f"✅ <b>Ofertas enviadas:</b> {stats.get('sent', 0)}\n"
+            f"🚫 <b>Produtos ignorados (Blacklist):</b> {stats.get('blacklisted', 0)}\n"
+            f"📉 <b>Preços monitorados:</b> {stats.get('total_db', 0)}\n\n"
+            "🚀 <i>O bot continua operando normalmente.</i>"
+        )
+
+        try:
+            await self.bot.send_message(
+                chat_id=self.chat_id,
+                text=report,
+                parse_mode=ParseMode.HTML
+            )
+            print("Status report sent to Telegram.")
+        except Exception as e:
+            print(f"Error sending report: {e}")

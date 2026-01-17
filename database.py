@@ -58,6 +58,12 @@ class Database:
             )
             conn.commit()
 
+    def get_total_count(self) -> int:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM sent_deals")
+            return cursor.fetchone()[0]
+
     def clean_old_deals(self, days=7):
         """Optional: remove deals older than X days to keep DB small"""
         with sqlite3.connect(self.db_path) as conn:
