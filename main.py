@@ -60,10 +60,18 @@ def get_category_hashtags(title: str) -> str:
             tags.add(f"#{category}")
     return " ".join(list(tags)) if tags else "#Oferta"
 
+# --- Evento para Forçar Varredura ---
+SCAN_EVENT = asyncio.Event()
+
 # --- Handlers do Telegram ---
 def is_admin(update: Update):
     if not ADMIN_USER_ID: return True # Se não configurado, permite todos (para teste inicial)
     return str(update.effective_user.id) == str(ADMIN_USER_ID)
+
+async def handle_scan(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update): return
+    await update.message.reply_text("🔎 <b>Forçando nova busca...</b>\nO bot vai vasculhar as lojas agora mesmo e te avisar se encontrar algo!", parse_mode=ParseMode.HTML)
+    SCAN_EVENT.set() # Acorda o loop principal
 
 async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update): return
