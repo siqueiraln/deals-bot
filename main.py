@@ -193,6 +193,7 @@ async def run_bot():
     telegram_handlers = {
         'start': handle_help,
         'help': handle_help,
+        'scan': handle_scan,
         'status': handle_status,
         'add': handle_add_manual,
         'hot': handle_add_hot,
@@ -259,7 +260,13 @@ async def run_bot():
             await notifier.send_status_report({"cycles": cycle_count, "sent": total_sent, "blacklisted": total_blacklisted, "total_db": db.get_total_count()})
 
         logger.info(f"Fim do ciclo. Aguardando...")
-        await asyncio.sleep(1800)
+        try:
+            # Espera 30 minutos OU até o SCAN_EVENT ser ativado
+            await asyncio.wait_for(SCAN_EVENT.wait(), timeout=1800)
+        except asyncio.TimeoutError:
+            pass
+
+        SCAN_EVENT.clear() # Reseta o sinal para o próximo ciclo
 
 if __name__ == "__main__":
     try: asyncio.run(run_bot())

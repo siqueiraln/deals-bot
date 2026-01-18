@@ -1,5 +1,1 @@
-# Adicione aqui links manuais (um por linha)
-# O bot vai tentar extrair os dados e aplicar seu link de afiliado.
-# Exemplo: https://www.mercadolivre.com.br/produto-exemplo
-https://mercadolivre.com/sec/257eCZq
-https://produto.mercadolivre.com.br/MLB-5706587400-camisa-de-trabalho-casual-masculina-de-manga-comprida-_JM?searchVariation=185459040004#polycard_client=recommendations_home_navigation-recommendations&reco_backend=machinalis-homes-univb-equivalent-offer&reco_client=home_navigation-recommendations&reco_item_pos=1&reco_backend_type=function&reco_id=5c982424-a15f-4ea7-9346-93232773dfa4&c_id=/home/navigation-recommendations/element&c_uid=a5c97e0e-3f0b-45d0-8c81-4c89ae31d9d0
+# Adicione links aqui (serão limpos após o processamento)
