@@ -19,14 +19,27 @@ class TelegramNotifier:
             # Inicializa a aplicação para comandos
             self.app = Application.builder().token(self.token).build()
 
-    async def send_deal(self, deal: Deal, hashtags: str = ""):
-        if not self.app or not self.chat_id:
+    async def send_deal(self, deal: Deal, hashtags: str = "", to_admin: bool = False):
+        # Define o destino: ID do Admin ou ID do Canal
+        target_id = self.chat_id
+        if to_admin:
+            admin_id = os.getenv("ADMIN_USER_ID")
+            if not admin_id:
+                print("ADMIN_USER_ID não configurado. Enviando para o canal padrão.")
+            else:
+                target_id = admin_id
+
+        if not self.app or not target_id:
             print(f"Telegram not configured. Deal: {deal.title}")
             return
 
         safe_title = html.escape(deal.title)
+
+        # Se for para o admin, adicionamos um cabeçalho de alerta
+        header = "🕵️ <b>NOVA OFERTA ENCONTRADA</b>\n\n" if to_admin else ""
+
         message = (
-            f"🔥 <b>{safe_title}</b>\n\n"
+            f"{header}🔥 <b>{safe_title}</b>\n\n"
             f"💰 <b>Preço:</b> R$ {deal.price:.2f}\n"
         )
         if deal.original_price:
@@ -37,14 +50,18 @@ class TelegramNotifier:
         message += (
             f"\n🏪 <b>Loja:</b> {deal.store}\n"
             f"{hashtags}\n\n"
-            f"🔗 <a href='{deal.affiliate_url}'>COMPRAR AGORA</a>"
+            f"🔗 <a href='{deal.affiliate_url or deal.url}'>LINK DO PRODUTO</a>"
         )
+
+        # Se for para o admin, adicionamos o link do painel para facilitar
+        if to_admin and deal.store == "Mercado Livre":
+            message += "\n\n🛠 <b>Ação sugerida:</b>\nCrie seu link em: <a href='https://www.mercadolivre.com.br/afiliados'>Painel ML</a>"
 
         try:
             if deal.image_url:
-                await self.app.bot.send_photo(chat_id=self.chat_id, photo=deal.image_url, caption=message, parse_mode=ParseMode.HTML)
+                await self.app.bot.send_photo(chat_id=target_id, photo=deal.image_url, caption=message, parse_mode=ParseMode.HTML)
             else:
-                await self.app.bot.send_message(chat_id=self.chat_id, text=message, parse_mode=ParseMode.HTML)
+                await self.app.bot.send_message(chat_id=target_id, text=message, parse_mode=ParseMode.HTML)
         except Exception as e:
             print(f"Error sending to Telegram: {e}")
 

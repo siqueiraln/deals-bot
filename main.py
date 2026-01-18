@@ -21,6 +21,7 @@ from logger import logger
 load_dotenv()
 
 # --- Configurações ---
+ADMIN_USER_ID = os.getenv("ADMIN_USER_ID")
 MIN_DISCOUNT_GENERAL = 20
 HOT_KEYWORDS_FILE = "hot_keywords.txt"
 MANUAL_LINKS_FILE = "manual_links.txt"
@@ -60,7 +61,12 @@ def get_category_hashtags(title: str) -> str:
     return " ".join(list(tags)) if tags else "#Oferta"
 
 # --- Handlers do Telegram ---
+def is_admin(update: Update):
+    if not ADMIN_USER_ID: return True # Se não configurado, permite todos (para teste inicial)
+    return str(update.effective_user.id) == str(ADMIN_USER_ID)
+
 async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update): return
     db = Database()
     report = (
         "🤖 <b>Bot Online & Operante</b>\n\n"
@@ -70,6 +76,7 @@ async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(report, parse_mode=ParseMode.HTML)
 
 async def handle_add_manual(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update): return
     link = context.args[0] if context.args else ""
     if "http" in link:
         with open(MANUAL_LINKS_FILE, "a", encoding="utf-8") as f:
@@ -79,6 +86,7 @@ async def handle_add_manual(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Use: /add [link]")
 
 async def handle_add_hot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update): return
     keyword = " ".join(context.args)
     if keyword:
         with open(HOT_KEYWORDS_FILE, "a", encoding="utf-8") as f:
@@ -86,11 +94,73 @@ async def handle_add_hot(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"🔥 '{keyword}' adicionado à busca ativa!")
 
 async def handle_add_block(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyword = " ".join(context.args)
+    if not is_admin(update): return
+    keyword = " ".join(context.args).lower()
     if keyword:
         with open(BLACKLIST_FILE, "a", encoding="utf-8") as f:
             f.write(f"{keyword}\n")
         await update.message.reply_text(f"🚫 '{keyword}' adicionado à blacklist!")
+
+async def handle_list_hot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update): return
+    keywords = load_file_lines(HOT_KEYWORDS_FILE)
+    if keywords:
+        text = "🔥 <b>Palavras-chave Ativas:</b>\n\n" + "\n".join([f"• {k}" for k in keywords])
+    else:
+        text = "Sua lista de busca ativa está vazia."
+    await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+
+async def handle_list_block(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update): return
+    keywords = load_file_lines(BLACKLIST_FILE)
+    if keywords:
+        text = "🚫 <b>Termos Bloqueados:</b>\n\n" + "\n".join([f"• {k}" for k in keywords])
+    else:
+        text = "Sua blacklist está vazia."
+    await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+
+async def handle_remove_hot(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update): return
+    keyword = " ".join(context.args).strip()
+    keywords = load_file_lines(HOT_KEYWORDS_FILE)
+    if keyword in keywords:
+        keywords.remove(keyword)
+        with open(HOT_KEYWORDS_FILE, "w", encoding="utf-8") as f:
+            for k in keywords: f.write(f"{k}\n")
+        await update.message.reply_text(f"✅ '{keyword}' removido da busca ativa.")
+    else:
+        await update.message.reply_text(f"❌ '{keyword}' não encontrado na lista.")
+
+async def handle_remove_block(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update): return
+    keyword = " ".join(context.args).strip().lower()
+    keywords = load_file_lines(BLACKLIST_FILE)
+    if keyword in keywords:
+        keywords.remove(keyword)
+        with open(BLACKLIST_FILE, "w", encoding="utf-8") as f:
+            for k in keywords: f.write(f"{k}\n")
+        await update.message.reply_text(f"✅ '{keyword}' removido da blacklist.")
+    else:
+        await update.message.reply_text(f"❌ '{keyword}' não encontrado na blacklist.")
+
+async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update): return
+    # ...
+    help_text = (
+        "📖 <b>Guia de Comandos do Bot</b>\n\n"
+        "🔗 <b>Links Diretos:</b> Basta colar um link no chat para postar.\n"
+        "📊 <b>/status:</b> Resumo de atividade do bot.\n\n"
+        "🔥 <b>Busca Ativa (Keywords):</b>\n"
+        "• <b>/hot [termo]:</b> Adiciona produto à busca.\n"
+        "• <b>/hot_list:</b> Lista termos ativos.\n"
+        "• <b>/remove_hot [termo]:</b> Remove termo.\n\n"
+        "🚫 <b>Segurança (Blacklist):</b>\n"
+        "• <b>/block [termo]:</b> Bloqueia palavras no título.\n"
+        "• <b>/block_list:</b> Lista termos bloqueados.\n"
+        "• <b>/remove_block [termo]:</b> Desbloqueia termo.\n\n"
+        "💡 <i>Dica: Links manuais são limpos automaticamente após o envio!</i>"
+    )
+    await update.message.reply_text(help_text, parse_mode=ParseMode.HTML)
 
 async def handle_direct_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
@@ -113,10 +183,16 @@ async def run_bot():
 
     # Iniciar escuta de comandos
     telegram_handlers = {
+        'start': handle_help,
+        'help': handle_help,
         'status': handle_status,
         'add': handle_add_manual,
         'hot': handle_add_hot,
         'block': handle_add_block,
+        'hot_list': handle_list_hot,
+        'block_list': handle_list_block,
+        'remove_hot': handle_remove_hot,
+        'remove_block': handle_remove_block,
         'handle_message': handle_direct_link
     }
     asyncio.create_task(notifier.start_listening(telegram_handlers))
@@ -141,61 +217,35 @@ async def run_bot():
         all_deals = []
         logger.info(f"--- Ciclo #{cycle_count} ---")
 
-        # 0. Links Manuais
+        # 0. Links Manuais (Estes vão para o CANAL PÚBLICO)
         if manual_links:
+            logger.info(f"Processando {len(manual_links)} links manuais para o CANAL...")
             for url in manual_links:
                 try:
                     deal = None
-                    if "mercadolivre" in url:
-                        deal = await ml_scraper.fetch_product_details(url)
-                    elif "amazon" in url:
-                        deal = await amz_scraper.fetch_product_details(url)
-                    elif "shopee" in url:
-                        deal = await shp_scraper.fetch_product_details(url)
+                    if "mercadolivre" in url: deal = await ml_scraper.fetch_product_details(url)
+                    elif "amazon" in url: deal = await amz_scraper.fetch_product_details(url)
+                    elif "shopee" in url: deal = await shp_scraper.fetch_product_details(url)
 
-                    if deal: all_deals.append(deal)
+                    if deal:
+                        # Para links manuais, usamos o link fornecido (que já pode ser de afiliado)
+                        # e enviamos para o CANAL (to_admin=False)
+                        await notifier.send_deal(deal, get_category_hashtags(deal.title), to_admin=False)
+                        db.add_sent_deal(deal)
                 except: pass
             clear_manual_links()
 
-        # 1. Mercado Livre
-        if cycle_count % ML_FREQUENCY == 0:
-            try:
-                deals = await ml_scraper.fetch_deals()
-                all_deals.extend([d for d in deals if (d.discount_percentage or 0) >= MIN_DISCOUNT_GENERAL])
-                for kw in hot_keywords:
-                    all_deals.extend(await ml_scraper.search_keyword(kw))
-                    await asyncio.sleep(2)
-            except Exception as e: logger.error(f"Erro ML: {e}")
-
-        # 2. Amazon
-        if cycle_count % AMZ_FREQUENCY == 0:
-            try:
-                deals = await amz_scraper.fetch_deals()
-                all_deals.extend([d for d in deals if (d.discount_percentage or 0) >= MIN_DISCOUNT_GENERAL])
-                if hot_keywords: all_deals.extend(await amz_scraper.search_keyword(random.choice(hot_keywords)))
-            except Exception as e: logger.error(f"Erro Amazon: {e}")
-
-        # 3. Shopee
-        if cycle_count % SHP_FREQUENCY == 0:
-            try:
-                deals = await shp_scraper.fetch_deals()
-                all_deals.extend([d for d in deals if (d.discount_percentage or 0) >= MIN_DISCOUNT_GENERAL])
-            except Exception as e: logger.error(f"Erro Shopee: {e}")
-
-        # 4. Processar
+        # 1-3. Buscas Automáticas (Estas vão apenas para o seu PRIVADO)
         if all_deals:
             unique_deals = {d.url: d for d in all_deals}.values()
             for deal in unique_deals:
-                if any(w in deal.title.lower() for w in blacklist):
-                    total_blacklisted += 1
-                    continue
+                if any(w in deal.title.lower() for w in blacklist): continue
 
                 if not db.is_deal_sent(deal.url, deal.price):
-                    deal.affiliate_url = affiliate_gen.generate(deal.url, deal.store)
-                    await notifier.send_deal(deal, get_category_hashtags(deal.title))
+                    # Alerta para o ADMIN (to_admin=True)
+                    await notifier.send_deal(deal, get_category_hashtags(deal.title), to_admin=True)
                     db.add_sent_deal(deal)
-                    total_sent += 1
-                    await asyncio.sleep(5)
+                    await asyncio.sleep(2)
 
         if cycle_count % REPORT_FREQUENCY == 0:
             await notifier.send_status_report({"cycles": cycle_count, "sent": total_sent, "blacklisted": total_blacklisted, "total_db": db.get_total_count()})

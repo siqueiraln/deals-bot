@@ -49,11 +49,15 @@ Este bot monitora promoções no Mercado Livre, Amazon e Shopee, e envia automat
 
 Agora você pode controlar o bot diretamente pelo chat:
 
-- **Colar um Link**: Basta colar um link do ML ou Amazon no chat e o bot agendará a postagem.
-- **`/status`**: Veja se o bot está online e o total de produtos monitorados.
+- **Colar um Link**: Basta colar um link do ML, Amazon ou Shopee no chat e o bot agendará a postagem.
+- **`/status`**: Veja se o bot está online e o resumo de atividade.
+- **`/add [link]`**: Adiciona links manuais para processamento imediato.
 - **`/hot [termo]`**: Adiciona uma palavra-chave para busca ativa prioritária.
-- **`/block [termo]`**: Adiciona uma palavra à blacklist para nunca ser postada.
-- **`/add [link]`**: Outra forma de adicionar links manuais.
+- **`/hot_list`**: Lista todas as palavras-chave de busca ativa.
+- **`/remove_hot [termo]`**: Remove um termo da busca ativa.
+- **`/block [termo]`**: Adiciona uma palavra à blacklist (filtro de segurança).
+- **`/block_list`**: Lista todos os termos na blacklist.
+- **`/remove_block [termo]`**: Remove um termo da blacklist.
 
 ## 🌟 Outras Funcionalidades
 
