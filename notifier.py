@@ -1,15 +1,14 @@
 import os
 import asyncio
 import html
-from telegram import Bot, Update
+from telegram import Bot, Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.constants import ParseMode
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from dotenv import load_dotenv
 from models.deal import Deal
+from telegram.request import HTTPXRequest
 
 load_dotenv()
-
-from telegram.request import HTTPXRequest
 
 class TelegramNotifier:
     def __init__(self):
@@ -44,9 +43,9 @@ class TelegramNotifier:
             return
 
         safe_title = html.escape(deal.title)
-
+        
         # Se for para o admin, adicionamos um cabeçalho de alerta
-        header = "🕵️ <b>NOVA OFERTA ENCONTRADA</b>\n\n" if to_admin else ""
+        header = "🕵️ <b>NOVA OFERTA (Aguardando Aprovação)</b>\n\n" if to_admin else ""
 
         message = (
             f"{header}🔥 <b>{safe_title}</b>\n\n"
@@ -67,11 +66,42 @@ class TelegramNotifier:
         if to_admin and deal.store == "Mercado Livre":
             message += "\n\n🛠 <b>Ação sugerida:</b>\nCrie seu link em: <a href='https://www.mercadolivre.com.br/afiliados'>Painel ML</a>"
 
+        # Botões de Ação (Apenas para Admin)
+        reply_markup = None
+        if to_admin:
+            keyboard = [
+                [
+                    InlineKeyboardButton("✅ Aprovar", callback_data="approve"),
+                    InlineKeyboardButton("❌ Rejeitar", callback_data="reject")
+                ]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
         try:
-            if deal.image_url:
-                await self.app.bot.send_photo(chat_id=target_id, photo=deal.image_url, caption=message, parse_mode=ParseMode.HTML)
+            if deal.image_url and deal.image_url.startswith("http"):
+                try:
+                    await self.app.bot.send_photo(
+                        chat_id=target_id, 
+                        photo=deal.image_url, 
+                        caption=message, 
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=reply_markup
+                    )
+                except Exception as img_err:
+                    print(f"Erro ao enviar imagem ({deal.image_url}): {img_err}. Tentando apenas texto.")
+                    await self.app.bot.send_message(
+                        chat_id=target_id, 
+                        text=message, 
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=reply_markup
+                    )
             else:
-                await self.app.bot.send_message(chat_id=target_id, text=message, parse_mode=ParseMode.HTML)
+                await self.app.bot.send_message(
+                    chat_id=target_id, 
+                    text=message, 
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=reply_markup
+                )
         except Exception as e:
             print(f"Error sending to Telegram: {e}")
 
@@ -89,6 +119,52 @@ class TelegramNotifier:
         except Exception as e:
             print(f"Error sending report: {e}")
 
+    async def _handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Processa os cliques nos botões de Aprovar/Rejeitar"""
+        query = update.callback_query
+        await query.answer() # Confirma o recebimento
+
+        data = query.data
+        message = query.message
+        
+        if data == "reject":
+            # Apaga a mensagem
+            await message.delete()
+        
+        elif data == "approve":
+            # Edita a mensagem no Admin para remover botões e marcar como Aprovado
+            # E envia para o Canal Principal
+            
+            # 1. Enviar para o Canal
+            # Precisamos limpar o cabeçalho de Admin da legenda
+            caption = message.caption_html if message.caption else message.text_html
+            clean_caption = caption.replace("🕵️ <b>NOVA OFERTA (Aguardando Aprovação)</b>\n\n", "")
+            
+            try:
+                if message.photo:
+                    # Envia a foto com a legenda limpa (reusando o file_id da foto pra ser rápido)
+                    photo_id = message.photo[-1].file_id
+                    await self.app.bot.send_photo(
+                        chat_id=self.chat_id,
+                        photo=photo_id,
+                        caption=clean_caption,
+                        parse_mode=ParseMode.HTML
+                    )
+                else:
+                    await self.app.bot.send_message(
+                        chat_id=self.chat_id,
+                        text=clean_caption,
+                        parse_mode=ParseMode.HTML,
+                        disable_web_page_preview=False
+                    )
+                
+                # 2. Feedback no Admin (Apagar para clareza)
+                await message.delete()
+
+            except Exception as e:
+                print(f"Erro ao aprovar oferta: {e}")
+                await message.reply_text(f"Erro ao enviar: {e}")
+
     # --- Handlers de Comandos ---
     async def start_listening(self, command_handlers: dict):
         """Inicia o bot para ouvir comandos"""
@@ -101,6 +177,9 @@ class TelegramNotifier:
         # Handler para qualquer mensagem (links diretos)
         if 'handle_message' in command_handlers:
             self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, command_handlers['handle_message']))
+            
+        # Handler para Botões (Callback)
+        self.app.add_handler(CallbackQueryHandler(self._handle_callback))
 
         print("Telegram Bot Listening for commands...")
         await self.app.initialize()

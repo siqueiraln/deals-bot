@@ -292,8 +292,8 @@ async def run_bot():
                 if any(w in deal.title.lower() for w in blacklist): continue
 
                 if not db.is_deal_sent(deal.url, deal.price):
-                    # Enviar direto para o CANAL (to_admin=False)
-                    await notifier.send_deal(deal, get_category_hashtags(deal.title), to_admin=False)
+                    # Alerta para o ADMIN (to_admin=True) - Agora com botões de Aprovar/Rejeitar
+                    await notifier.send_deal(deal, get_category_hashtags(deal.title), to_admin=True)
                     db.add_sent_deal(deal)
                     await asyncio.sleep(2)
 

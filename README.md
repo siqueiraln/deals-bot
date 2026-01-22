@@ -1,80 +1,61 @@
-# Bot de Promoções com Links de Afiliado
+# Bot de Promoções (Versão: ML Hub 🚀)
 
-Este bot monitora promoções no Mercado Livre, Amazon e Shopee, e envia automaticamente para um canal do Telegram com seus links de afiliado.
+Bot focado em automatizar o **Hub de Afiliados do Mercado Livre**, minerando ofertas com alta comissão ("Ganhos Extras") e gerando links de afiliado automaticamente.
 
-## 🚀 Funcionalidades
+## 🚀 Funcionalidades Atuais
 
-- **Scraping Automático**: Vasculha as seções de ofertas do Mercado Livre, Amazon e Shopee.
-- **Gerador de Link de Afiliado**: Converte URLs normais em links de afiliado.
-- **Notificação via Telegram**: Envia fotos, títulos, preços e botões de compra para o seu canal.
-- **Persistência**: Evita o envio duplicado de promoções já processadas.
+- **Mercado Livre Hub**: Acessa sua conta via cookies, encontra ofertas > 10% de comissão.
+- **Auto-Link Gen**: Clica automaticamente no botão "Compartilhar" para gerar o link `/sec/`.
+- **Filtro de Comissão**: Ignora ofertas com margem baixa.
+- **Envio Automático**: Posta ofertas validadas diretamente no Canal do Telegram.
+- **Notificação Admin**: Avisa sobre erros, status e comandos.
+
+**Nota:** Os scrapers de Amazon e Shopee foram desativados temporariamente para foco no ML.
 
 ## 🛠️ Pré-requisitos
 
-- Python 3.10+
-- [Node.js](https://nodejs.org/) (necessário para o Playwright)
-- Uma conta de afiliado em cada plataforma.
-- Um Bot no Telegram (criado via @BotFather).
+1.  Python 3.10+ e Node.js.
+2.  Conta de Afiliado Mercado Livre aprovada.
+3.  Extensão **EditThisCookie** (Chrome/Edge) para extrair o arquivo `cookies.json`.
 
-## 📦 Instalação
+## ⚙️ Instalação e Configuração
 
-1. Clone ou baixe este repositório.
-2. Crie um ambiente virtual:
-   ```bash
-   python -m venv venv
-   ```
-3. Ative o ambiente virtual:
-   - Windows: `venv\Scripts\activate`
-   - Linux/Mac: `source venv/bin/activate`
-4. Instale as dependências:
-   ```bash
-   pip install -r requirements.txt
-   ```
-5. Instale os navegadores do Playwright:
-   ```bash
-   playwright install chromium
-   ```
+1.  **Clone e Instale:**
+    ```bash
+    git clone [seu-repo]
+    python -m venv venv
+    venv\Scripts\activate
+    pip install -r requirements.txt
+    playwright install chromium
+    ```
 
-## ⚙️ Configuração
+2.  **Configuração de Ambiente (.env):**
+    Renomeie `.env.example` para `.env` e preencha:
+    - `TELEGRAM_BOT_TOKEN`: Token do BotFather.
+    - `TELEGRAM_CHAT_ID`: ID do seu CANAL de ofertas (onde o bot posta).
+    - `ADMIN_USER_ID`: Seu ID pessoal (para comandos de controle).
 
-1. Renomeie o arquivo `.env.example` para `.env`.
-2. Preencha as informações necessárias:
-   - `TELEGRAM_BOT_TOKEN`: Token do seu bot.
-   - `TELEGRAM_CHAT_ID`: ID do canal ou grupo (ex: `-100...`).
-   - `AMAZON_AFFILIATE_TAG`: Seu ID de associado Amazon (ex: `seu-id-20`).
-   - `ML_AFFILIATE_ID`: Seu ID/parâmetro de afiliado do Mercado Livre.
-   - `SHOPEE_AFFILIATE_TAG`: Seu ID de afiliado Shopee.
+3.  **Cookies do Mercado Livre (CRÍTICO):**
+    - Logue no Mercado Livre e acesse o [Hub de Afiliados](https://www.mercadolivre.com.br/afiliados/hub).
+    - Use a extensão *EditThisCookie*, exporte os cookies para JSON.
+    - Salve como `cookies.json` na raiz do projeto.
+    - **Importante:** Se o bot parar de logar, renove este arquivo.
 
-## 🎮 Comandos do Telegram (Dashboard)
+## 🎮 Comandos (Admin Privado)
 
-Agora você pode controlar o bot diretamente pelo chat:
+Fale com o bot no privado para controlar:
 
-- **Colar um Link**: Basta colar um link do ML, Amazon ou Shopee no chat e o bot agendará a postagem.
-- **`/status`**: Veja se o bot está online e o resumo de atividade.
-- **`/add [link]`**: Adiciona links manuais para processamento imediato.
-- **`/hot [termo]`**: Adiciona uma palavra-chave para busca ativa prioritária.
-- **`/hot_list`**: Lista todas as palavras-chave de busca ativa.
-- **`/remove_hot [termo]`**: Remove um termo da busca ativa.
-- **`/block [termo]`**: Adiciona uma palavra à blacklist (filtro de segurança).
-- **`/block_list`**: Lista todos os termos na blacklist.
-- **`/remove_block [termo]`**: Remove um termo da blacklist.
-
-## 🌟 Outras Funcionalidades
-
-- **Encurtador de Links**: Todos os links são automaticamente encurtados via TinyURL.
-- **Categorização Automática**: Identifica produtos e adiciona #hashtags.
-- **Manutenção Automática**: Limpa o banco de dados de ofertas com mais de 15 dias para manter a performance.
-- **Blacklist**: Filtro de palavras para evitar itens indesejados.
-
-## ✍️ Como adicionar links manualmente
-
-1. Abra o arquivo `manual_links.txt`.
-2. Cole o link do Mercado Livre ou Amazon (um por linha).
-3. Salve o arquivo.
-4. O bot processará esses links no início do próximo ciclo e **limpará o arquivo automaticamente**.
+- **`/status`**: Resumo de ciclos e ofertas enviadas.
+- **`/scan`**: Força uma busca imediata no Hub.
+- **`/add [link]`**: Processa um link manual na hora.
 
 ## 📊 Estratégia de Busca
 
-- **Mercado Livre**: Foco total. Busca ativa de todos os termos em `hot_keywords.txt` a cada 30 min.
-- **Amazon**: Busca periódica a cada ~1.5h de termos aleatórios da lista.
-- **Shopee**: Busca periódica a cada ~2h.
+- **Modo Atual:** Busca Autenticada (ML Hub).
+  - Ignora `hot_keywords.txt` (busca o que o ML recomenda no painel).
+  - Ciclos de verificação a cada 30 minutos (ajustável em `ML_FREQUENCY`).
+
+- **Segurança:**
+  - `playwright-stealth`: Camuflagem para evitar bloqueios.
+  - `cookies.json`: Sessão real de usuário.
+  - Rate Limiting e Intervalos Aleatórios.
