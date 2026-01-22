@@ -14,7 +14,7 @@ from bs4 import BeautifulSoup
 from models.deal import Deal
 
 class MercadoLivreHubScraper:
-    def __init__(self, cookies_path="cookies.json"):
+    def __init__(self, cookies_path="data/cookies.json"):
         self.cookies_path = cookies_path
         self.hub_url = "https://www.mercadolivre.com.br/afiliados/hub"
 

@@ -2,7 +2,7 @@ import sqlite3
 import os
 
 def clear_db():
-    db_path = "deals.db"
+    db_path = "data/deals.db"
     if not os.path.exists(db_path):
         print("Database not found.")
         return

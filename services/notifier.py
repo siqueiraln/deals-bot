@@ -7,6 +7,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQu
 from dotenv import load_dotenv
 from models.deal import Deal
 from telegram.request import HTTPXRequest
+from services.copywriter import Copywriter
 
 load_dotenv()
 
@@ -15,9 +16,9 @@ class TelegramNotifier:
         self.token = os.getenv("TELEGRAM_BOT_TOKEN")
         self.chat_id = os.getenv("TELEGRAM_CHAT_ID")
         self.app = None
+        self.copywriter = Copywriter()
 
         if self.token:
-            # Inicializa a aplicação para comandos
             # Configurando timeouts via HTTPXRequest
             trequest = HTTPXRequest(connection_pool_size=8, read_timeout=30, connect_timeout=30)
             
@@ -29,7 +30,6 @@ class TelegramNotifier:
             )
 
     async def send_deal(self, deal: Deal, hashtags: str = "", to_admin: bool = False):
-        # Define o destino: ID do Admin ou ID do Canal
         target_id = self.chat_id
         if to_admin:
             admin_id = os.getenv("ADMIN_USER_ID")
@@ -42,27 +42,27 @@ class TelegramNotifier:
             print(f"Telegram not configured. Deal: {deal.title}")
             return
 
-        safe_title = html.escape(deal.title)
+        # Gera legenda com IA
+        ai_text = await self.copywriter.generate_caption(deal)
         
         # Se for para o admin, adicionamos um cabeçalho de alerta
         header = "🕵️ <b>NOVA OFERTA (Aguardando Aprovação)</b>\n\n" if to_admin else ""
 
         message = (
-            f"{header}🔥 <b>{safe_title}</b>\n\n"
-            f"💰 <b>Preço:</b> R$ {deal.price:.2f}\n"
+            f"{header}"
+            f"{ai_text}\n\n"
         )
-        if deal.original_price:
-            message += f"❌ <b>De:</b> <s>R$ {deal.original_price:.2f}</s>\n"
-        if deal.discount_percentage:
-            message += f"📉 <b>Desconto:</b> {deal.discount_percentage}% OFF\n"
+        
+        # Garante que as informações técnicas estejam presentes
+        if "R$" not in ai_text:
+             message += f"💰 <b>Preço:</b> R$ {deal.price:.2f}\n"
 
         message += (
-            f"\n🏪 <b>Loja:</b> {deal.store}\n"
+            f"🏪 <b>Loja:</b> {deal.store}\n"
             f"{hashtags}\n\n"
             f"🔗 <a href='{deal.affiliate_url or deal.url}'>LINK DO PRODUTO</a>"
         )
 
-        # Se for para o admin, adicionamos o link do painel para facilitar
         if to_admin and deal.store == "Mercado Livre":
             message += "\n\n🛠 <b>Ação sugerida:</b>\nCrie seu link em: <a href='https://www.mercadolivre.com.br/afiliados'>Painel ML</a>"
 
@@ -122,27 +122,20 @@ class TelegramNotifier:
     async def _handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Processa os cliques nos botões de Aprovar/Rejeitar"""
         query = update.callback_query
-        await query.answer() # Confirma o recebimento
+        await query.answer()
 
         data = query.data
         message = query.message
         
         if data == "reject":
-            # Apaga a mensagem
             await message.delete()
         
         elif data == "approve":
-            # Edita a mensagem no Admin para remover botões e marcar como Aprovado
-            # E envia para o Canal Principal
-            
-            # 1. Enviar para o Canal
-            # Precisamos limpar o cabeçalho de Admin da legenda
             caption = message.caption_html if message.caption else message.text_html
             clean_caption = caption.replace("🕵️ <b>NOVA OFERTA (Aguardando Aprovação)</b>\n\n", "")
             
             try:
                 if message.photo:
-                    # Envia a foto com a legenda limpa (reusando o file_id da foto pra ser rápido)
                     photo_id = message.photo[-1].file_id
                     await self.app.bot.send_photo(
                         chat_id=self.chat_id,
@@ -157,28 +150,18 @@ class TelegramNotifier:
                         parse_mode=ParseMode.HTML,
                         disable_web_page_preview=False
                     )
-                
-                # 2. Feedback no Admin (Apagar para clareza)
                 await message.delete()
 
             except Exception as e:
                 print(f"Erro ao aprovar oferta: {e}")
                 await message.reply_text(f"Erro ao enviar: {e}")
 
-    # --- Handlers de Comandos ---
     async def start_listening(self, command_handlers: dict):
-        """Inicia o bot para ouvir comandos"""
         if not self.app: return
-
-        # Registra os comandos passados pelo main.py
         for cmd, handler in command_handlers.items():
             self.app.add_handler(CommandHandler(cmd, handler))
-
-        # Handler para qualquer mensagem (links diretos)
         if 'handle_message' in command_handlers:
             self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, command_handlers['handle_message']))
-            
-        # Handler para Botões (Callback)
         self.app.add_handler(CallbackQueryHandler(self._handle_callback))
 
         print("Telegram Bot Listening for commands...")

@@ -15,18 +15,18 @@ from scrapers.mercadolivre_hub import MercadoLivreHubScraper
 from scrapers.amazon import AmazonScraper
 from scrapers.shopee import ShopeeScraper
 from affiliate.generator import AffiliateLinkGenerator
-from notifier import TelegramNotifier
-from database import Database
-from logger import logger
+from services.notifier import TelegramNotifier
+from core.database import Database
+from config.logger import logger
 
 load_dotenv()
 
 # --- Configurações ---
 ADMIN_USER_ID = os.getenv("ADMIN_USER_ID")
 MIN_DISCOUNT_GENERAL = 20
-HOT_KEYWORDS_FILE = "hot_keywords.txt"
-MANUAL_LINKS_FILE = "manual_links.txt"
-BLACKLIST_FILE = "blacklist.txt"
+HOT_KEYWORDS_FILE = "data/hot_keywords.txt"
+MANUAL_LINKS_FILE = "data/manual_links.txt"
+BLACKLIST_FILE = "data/blacklist.txt"
 
 ML_FREQUENCY = 1
 AMZ_FREQUENCY = 3
@@ -295,7 +295,7 @@ async def run_bot():
                     # Alerta para o ADMIN (to_admin=True) - Agora com botões de Aprovar/Rejeitar
                     await notifier.send_deal(deal, get_category_hashtags(deal.title), to_admin=True)
                     db.add_sent_deal(deal)
-                    await asyncio.sleep(2)
+                    await asyncio.sleep(5) # Rate limit para IA (evitar 429)
 
         if cycle_count % REPORT_FREQUENCY == 0:
             await notifier.send_status_report({"cycles": cycle_count, "sent": total_sent, "blacklisted": total_blacklisted, "total_db": db.get_total_count()})

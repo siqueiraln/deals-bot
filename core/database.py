@@ -3,7 +3,7 @@ from datetime import datetime
 from models.deal import Deal
 
 class Database:
-    def __init__(self, db_path="deals.db"):
+    def __init__(self, db_path="data/deals.db"):
         self.db_path = db_path
         self._create_table()
 
