@@ -29,7 +29,7 @@ class TelegramNotifier:
                 .build()
             )
 
-    async def send_deal(self, deal: Deal, hashtags: str = "", to_admin: bool = False):
+    async def send_deal(self, deal: Deal, to_admin: bool = False):
         target_id = self.chat_id
         if to_admin:
             admin_id = os.getenv("ADMIN_USER_ID")
@@ -48,20 +48,29 @@ class TelegramNotifier:
         # Se for para o admin, adicionamos um cabeçalho de alerta
         header = "🕵️ <b>NOVA OFERTA (Aguardando Aprovação)</b>\n\n" if to_admin else ""
 
-        message = (
-            f"{header}"
-            f"{ai_text}\n\n"
-        )
+        # Layout Minimalista
+        # 1. Headline (Negrito + Upper)
+        # 2. Nome do Produto
+        # 3. Preços
+        # 4. Loja
+        # 5. Link
         
-        # Garante que as informações técnicas estejam presentes
-        if "R$" not in ai_text:
-             message += f"💰 <b>Preço:</b> R$ {deal.price:.2f}\n"
+        message = f"{header}"
+        message += f"🔥 <b>{ai_text.upper()}</b>\n\n"
+        message += f"{deal.title}\n\n"
+        
+        # Preços (De / Por)
+        if deal.original_price and deal.original_price > deal.price:
+            message += f"De <s>R$ {deal.original_price:.2f}</s> por R$ {deal.price:.2f}\n"
+        else:
+             message += f"R$ {deal.price:.2f}\n"
 
-        message += (
-            f"🏪 <b>Loja:</b> {deal.store}\n"
-            f"{hashtags}\n\n"
-            f"🔗 <a href='{deal.affiliate_url or deal.url}'>LINK DO PRODUTO</a>"
-        )
+        # Loja (Sem label)
+        message += f"{deal.store}\n\n"
+        
+        # Link
+        link_url = deal.affiliate_url or deal.url
+        message += f"{link_url}"
 
         if to_admin and deal.store == "Mercado Livre":
             message += "\n\n🛠 <b>Ação sugerida:</b>\nCrie seu link em: <a href='https://www.mercadolivre.com.br/afiliados'>Painel ML</a>"

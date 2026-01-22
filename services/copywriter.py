@@ -21,7 +21,7 @@ class Copywriter:
             max_output_tokens=1024,
         )
         self.model = genai.GenerativeModel(
-            model_name='gemini-2.0-flash-exp',
+            model_name='gemini-2.5-flash',
             generation_config=self.generation_config
         )
 
@@ -31,23 +31,18 @@ class Copywriter:
             return f"🔥 <b>{deal.title}</b>"
 
         prompt = f"""
-        Você é um administrador de um canal de promoções no Telegram. Seu objetivo é fazer o usuário clicar AGORA.
-        Seja exagerado, use gírias de internet (TOP, Corre, Insano) e crie senso de urgência.
+        Você é um expert em copywriting para notificações curtas.
         
         Produto: {deal.title}
         Preço: R$ {deal.price:.2f}
-        Loja: {deal.store}
-
-        Regras Cruciais:
-        1. Comece com uma Headline BOMBÁSTICA em Negrito. Ex: <b>🔥 FICOU DE GRAÇA!</b> ou <b>🚨 ERRO DE PREÇO?</b>
-        2. Dê uma opinião curta e engraçada/empolgada sobre o produto.
-        3. NÃO invente funcionalidades falsas, foque no preço e oportunidade.
-        4. NÃO coloque o link, nem hashtags.
-        5. Máximo de 3 linhas de texto (sem contar os espaçamentos).
         
-        Exemplo de Saída:
-        <b>🚨 PREÇO DERRUBADO!</b>
-        Galera, o estagiário endoidou! Essa TV tá saindo mais barato que monitor. Imagem 4K absurda pra jogar seu PS5.
+        Sua missão: Escreva APENAS uma headline curta (máximo 50 caracteres) e impactante.
+        Use gatilhos de urgência ou curiosidade.
+        
+        Regras:
+        1. APENAS O TEXTO DA HEADLINE. Nada mais.
+        2. Sem aspas, sem markdown, sem emojis no início.
+        3. Exemplo: "PREÇO DE ERRO! CORRE AGORA" ou "SÓ HOJE: MENOR PREÇO HISTÓRICO"
         """
 
         try:

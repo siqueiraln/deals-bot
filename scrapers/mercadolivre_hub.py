@@ -100,7 +100,14 @@ class MercadoLivreHubScraper:
                 cards = soup.select(".poly-card")
                 print(f"Found {len(cards)} items in Hub.")
 
+                # LIMIT TO 3 FOR TESTING
+                deal_count = 0
+                max_deals = 15
+
                 for card in cards:
+                    if deal_count >= max_deals:
+                        print(f"⚠️ Limite de {max_deals} ofertas atingido (modo teste)")
+                        break
                     try:
                         # Title and Link
                         title_el = card.select_one(".poly-component__title")
@@ -163,16 +170,26 @@ class MercadoLivreHubScraper:
                         if deal.url.startswith("http"): # Ensure valid URL
                             try:
                                 print(f"   Generating affiliate link for: {deal.title[:30]}...")
-                                affiliate_link = await self._get_affiliate_link(page, deal.url)
+                                affiliate_link, store_name, original_price = await self._get_affiliate_link(page, deal.url)
                                 if affiliate_link:
                                     deal.url = affiliate_link
                                     print(f"   ✅ Link generated: {deal.url}")
                                 else:
                                     print("   ⚠️ Failed to generate link.")
+                                
+                                # Update store name if found
+                                if store_name:
+                                    deal.store = store_name
+                                
+                                # Update original price if found
+                                if original_price:
+                                    deal.original_price = original_price
                             except Exception as e:
                                 print(f"   ❌ Error generating link: {e}")
 
                         deals.append(deal)
+                        deal_count += 1  # Increment counter
+
 
                     except Exception as e:
                         print(f"Error parsing hub item: {e}")
@@ -187,7 +204,9 @@ class MercadoLivreHubScraper:
         return deals
 
     async def _get_affiliate_link(self, page, product_url):
-        """Navigates to product page and uses the toolbar to generate an affiliate link."""
+        """Navigates to product page and extracts: affiliate link, store name, and original price.
+        Returns: (affiliate_link, store_name, original_price)
+        """
         try:
             # Open new page or use existing? 
             # We are in a loop, reusing 'page' might lose the Hub context.
@@ -201,6 +220,51 @@ class MercadoLivreHubScraper:
 
             await new_page.goto(product_url, wait_until="domcontentloaded", timeout=45000)
             await asyncio.sleep(4) # Wait for toolbar
+
+            # Extract store name and original price from product page
+            store_name = None
+            original_price = None
+            
+            try:
+                # Get page content for parsing
+                content = await new_page.content()
+                soup = BeautifulSoup(content, 'html.parser')
+                
+                # Extract store name - look for seller info
+                # Try multiple selectors
+                store_selectors = [
+                    "a.ui-pdp-seller__link-trigger",  # Main seller link
+                    ".ui-pdp-seller__header__title",   # Seller header
+                    "p.ui-pdp-color--BLACK",           # Alternative
+                ]
+                for selector in store_selectors:
+                    store_el = soup.select_one(selector)
+                    if store_el:
+                        # Use separator=' ' to avoid "Loja oficialBrand" concatenation
+                        raw_store = store_el.get_text(separator=' ', strip=True)
+                        
+                        # Clean up "Loja oficial" prefix (case insensitive)
+                        # We want just "CeraVe", not "Loja oficial CeraVe"
+                        clean_name = re.sub(r'(?i)^loja\s*oficial\s*', '', raw_store).strip()
+                        
+                        if clean_name and len(clean_name) > 1:
+                            store_name = clean_name.title() # Force Title Case
+                            break
+                
+                # Extract original price (before discount)
+                original_price_el = soup.select_one(".andes-money-amount--previous s")
+                if original_price_el:
+                    price_text = original_price_el.get_text(strip=True)
+                    # Extract numbers only
+                    price_match = re.search(r"([\d.]+)", price_text.replace('.', ''))
+                    if price_match:
+                        original_price = float(price_match.group(1))
+                        print(f"   📊 Original price found: R$ {original_price:.2f}")
+                
+                if store_name:
+                    print(f"   🏪 Store name found: {store_name}")
+            except Exception as e:
+                print(f"   ⚠️ Error extracting product details: {e}")
 
             # Click "Compartilhar"
             share_btn = await new_page.query_selector("text=Compartilhar")
@@ -236,7 +300,7 @@ class MercadoLivreHubScraper:
                 if val and "/sec/" in val:
                     print(f"   ✨ Found link in INPUT: {val}")
                     await new_page.close()
-                    return val
+                    return (val, store_name, original_price)
 
             # Strategy 2: Check Textarea "Texto sugerido" (User suggestion)
             textareas = await new_page.query_selector_all("div[role='dialog'] textarea")
@@ -253,7 +317,7 @@ class MercadoLivreHubScraper:
                     link = match.group(0)
                     print(f"   ✨ Found link in TEXTAREA: {link}")
                     await new_page.close()
-                    return link
+                    return (link, store_name, original_price)
             
             # Strategy 3: Check generic text content of the dialog
             dialog = await new_page.query_selector("div[role='dialog']")
@@ -264,23 +328,23 @@ class MercadoLivreHubScraper:
                     link = match.group(0)
                     print(f"   ✨ Found link in DIALOG TEXT: {link}")
                     await new_page.close()
-                    return link
+                    return (link, store_name, original_price)
 
             print("   ❌ No SEC link found in modal.")
             await new_page.close()
-            return None
+            return (None, store_name, original_price)
 
         except Exception as e:
             print(f"   ❌ Link generation error: {e}")
             try: await new_page.close()
             except: pass
-            return None
+            return (None, None, None)
 
         except Exception as e:
             print(f"   Link generation error: {e}")
             try: await new_page.close()
             except: pass
-            return None
+            return (None, None, None)
 
 if __name__ == "__main__":
     scraper = MercadoLivreHubScraper()

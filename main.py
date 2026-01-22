@@ -243,7 +243,7 @@ async def run_bot():
                     if deal:
                         # Para links manuais, usamos o link fornecido (que já pode ser de afiliado)
                         # e enviamos para o CANAL (to_admin=False)
-                        await notifier.send_deal(deal, get_category_hashtags(deal.title), to_admin=False)
+                        await notifier.send_deal(deal, to_admin=False)
                         db.add_sent_deal(deal)
                 except Exception as e:
                     logger.error(f"Erro ao processar link manual {url}: {e}")
@@ -293,7 +293,7 @@ async def run_bot():
 
                 if not db.is_deal_sent(deal.url, deal.price):
                     # Alerta para o ADMIN (to_admin=True) - Agora com botões de Aprovar/Rejeitar
-                    await notifier.send_deal(deal, get_category_hashtags(deal.title), to_admin=True)
+                    await notifier.send_deal(deal, to_admin=True)
                     db.add_sent_deal(deal)
                     await asyncio.sleep(5) # Rate limit para IA (evitar 429)
 
