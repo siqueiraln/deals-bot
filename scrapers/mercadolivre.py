@@ -1,5 +1,6 @@
 import asyncio
 from playwright.async_api import async_playwright
+from playwright_stealth import Stealth
 from bs4 import BeautifulSoup
 from models.deal import Deal
 from typing import List
@@ -14,6 +15,8 @@ class MercadoLivreScraper:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             page = await browser.new_page()
+            stealth = Stealth()
+            await stealth.apply_stealth_async(page)
 
             # Set user agent to avoid basic detection
             await page.set_extra_http_headers({
@@ -126,6 +129,8 @@ class MercadoLivreScraper:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             page = await browser.new_page()
+            stealth = Stealth()
+            await stealth.apply_stealth_async(page)
             await page.set_extra_http_headers({
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
             })
@@ -182,6 +187,8 @@ class MercadoLivreScraper:
         async with async_playwright() as p:
             browser = await p.chromium.launch(headless=True)
             page = await browser.new_page()
+            stealth = Stealth()
+            await stealth.apply_stealth_async(page)
             await page.set_extra_http_headers({
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
             })

@@ -1,6 +1,6 @@
 import asyncio
 from playwright.async_api import async_playwright
-from playwright_stealth import stealth
+from playwright_stealth import Stealth
 from bs4 import BeautifulSoup
 from models.deal import Deal
 from typing import List
@@ -21,7 +21,8 @@ class AmazonScraper:
                 viewport={'width': 1920, 'height': 1080}
             )
             page = await context.new_page()
-            await stealth(page)
+            stealth = Stealth()
+            await stealth.apply_stealth_async(page)
 
             print(f"Fetching deals from {self.base_url}...")
             try:
@@ -106,7 +107,8 @@ class AmazonScraper:
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             )
             page = await context.new_page()
-            await stealth(page)
+            stealth = Stealth()
+            await stealth.apply_stealth_async(page)
 
             try:
                 await page.goto(url, wait_until="domcontentloaded", timeout=60000)
@@ -156,7 +158,8 @@ class AmazonScraper:
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             )
             page = await context.new_page()
-            await stealth(page)
+            stealth = Stealth()
+            await stealth.apply_stealth_async(page)
 
             print(f"Searching Amazon for: {keyword}...")
             try:

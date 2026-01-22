@@ -1,61 +1,69 @@
 import asyncio
+import os
 import sys
+
+# Add project root to path
+sys.path.append(os.getcwd())
+
 from scrapers.mercadolivre import MercadoLivreScraper
 from scrapers.amazon import AmazonScraper
 from scrapers.shopee import ShopeeScraper
 
-async def test_mercadolivre():
-    print("\n--- Testing Mercado Livre Scraper ---")
-    scraper = MercadoLivreScraper()
-    deals = await scraper.fetch_deals()
-    for deal in deals[:3]:
-        print(f"Title: {deal.title}")
-        print(f"Price: R$ {deal.price}")
-        print(f"Discount: {deal.discount_percentage}%")
-        print(f"URL: {deal.url}")
-        print("-" * 20)
-    print(f"Total deals found: {len(deals)}")
+async def test_scrapers():
+    keyword = "iphone"
+    print(f"🔍 Iniciando teste de scrapers para o termo: '{keyword}'\n")
 
-async def test_amazon():
-    print("\n--- Testing Amazon Scraper ---")
-    scraper = AmazonScraper()
-    deals = await scraper.fetch_deals()
-    for deal in deals[:3]:
-        print(f"Title: {deal.title}")
-        print(f"Price: R$ {deal.price}")
-        print(f"Discount: {deal.discount_percentage}%")
-        print(f"URL: {deal.url}")
-        print("-" * 20)
-    print(f"Total deals found: {len(deals)}")
+    # teste Mercado Livre
+    try:
+        print("------- MERCADO LIVRE -------")
+        print("Inicializando scraper com Stealth...")
+        ml = MercadoLivreScraper()
+        deals = await ml.search_keyword(keyword)
+        print(f"✅ Sucesso! Encontrados: {len(deals)} ofertas.")
+        if deals:
+            print(f"   Exemplo: {deals[0].title[:50]}... | R$ {deals[0].price}")
+    except Exception as e:
+        print(f"❌ Falha no Mercado Livre: {e}")
 
-async def test_shopee():
-    print("\n--- Testing Shopee Scraper ---")
-    scraper = ShopeeScraper()
-    deals = await scraper.fetch_deals()
-    for deal in deals[:3]:
-        print(f"Title: {deal.title}")
-        print(f"Price: R$ {deal.price}")
-        print(f"Discount: {deal.discount_percentage}%")
-        print(f"URL: {deal.url}")
-        print("-" * 20)
-    print(f"Total deals found: {len(deals)}")
+    # teste Amazon
+    try:
+        print("\n------- AMAZON -------")
+        print("Inicializando scraper...")
+        amz = AmazonScraper()
+        deals = await amz.search_keyword(keyword)
+        print(f"✅ Sucesso! Encontrados: {len(deals)} ofertas.")
+        if deals:
+             print(f"   Exemplo: {deals[0].title[:50]}... | R$ {deals[0].price}")
+    except Exception as e:
+         print(f"❌ Falha na Amazon: {e}")
 
-async def main():
-    if len(sys.argv) > 1:
-        choice = sys.argv[1].lower()
-        if choice == "ml":
-            await test_mercadolivre()
-        elif choice == "amazon":
-            await test_amazon()
-        elif choice == "shopee":
-            await test_shopee()
+    # Teste Shopee
+    try:
+        print("\n------- SHOPEE -------")
+        print("Inicializando scraper...")
+        shp = ShopeeScraper()
+        deals = await shp.search_keyword(keyword)
+        print(f"✅ Sucesso! Encontrados: {len(deals)} ofertas.")
+        if deals:
+             print(f"   Exemplo: {deals[0].title[:50]}... | R$ {deals[0].price}")
+    except Exception as e:
+        print(f"❌ Falha na Shopee: {e}")
+
+    # Teste Mercado Livre Hub (Authenticated)
+    try:
+        print("\n------- MERCADO LIVRE HUB (Authenticated) -------")
+        from scrapers.mercadolivre_hub import MercadoLivreHubScraper
+        if os.path.exists("cookies.json"):
+            print("Inicializando scraper do Hub com cookies...")
+            ml_hub = MercadoLivreHubScraper()
+            deals = await ml_hub.fetch_my_deals()
+            print(f"✅ Sucesso! Encontrados: {len(deals)} ofertas no Hub.")
+            if deals:
+                print(f"   Exemplo: {deals[0].title[:50]}... | R$ {deals[0].price}")
         else:
-            print("Invalid choice. Use: ml, amazon, or shopee")
-    else:
-        print("Running all tests...")
-        await test_mercadolivre()
-        await test_amazon()
-        await test_shopee()
+            print("⚠️ cookies.json não encontrado. Pulando teste do Hub.")
+    except Exception as e:
+        print(f"❌ Falha no Mercado Livre Hub: {e}")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(test_scrapers())

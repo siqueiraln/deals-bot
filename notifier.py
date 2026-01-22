@@ -9,6 +9,8 @@ from models.deal import Deal
 
 load_dotenv()
 
+from telegram.request import HTTPXRequest
+
 class TelegramNotifier:
     def __init__(self):
         self.token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -17,7 +19,15 @@ class TelegramNotifier:
 
         if self.token:
             # Inicializa a aplicação para comandos
-            self.app = Application.builder().token(self.token).build()
+            # Configurando timeouts via HTTPXRequest
+            trequest = HTTPXRequest(connection_pool_size=8, read_timeout=30, connect_timeout=30)
+            
+            self.app = (
+                Application.builder()
+                .token(self.token)
+                .request(trequest)
+                .build()
+            )
 
     async def send_deal(self, deal: Deal, hashtags: str = "", to_admin: bool = False):
         # Define o destino: ID do Admin ou ID do Canal

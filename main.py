@@ -11,6 +11,7 @@ from telegram.ext import ContextTypes
 from telegram.constants import ParseMode
 
 from scrapers.mercadolivre import MercadoLivreScraper
+from scrapers.mercadolivre_hub import MercadoLivreHubScraper
 from scrapers.amazon import AmazonScraper
 from scrapers.shopee import ShopeeScraper
 from affiliate.generator import AffiliateLinkGenerator
@@ -171,6 +172,7 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(help_text, parse_mode=ParseMode.HTML)
 
 async def handle_direct_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message: return
     text = update.message.text
     if text and "http" in text:
         with open(MANUAL_LINKS_FILE, "a", encoding="utf-8") as f:
@@ -186,8 +188,9 @@ async def run_bot():
     affiliate_gen = AffiliateLinkGenerator()
 
     ml_scraper = MercadoLivreScraper()
-    amz_scraper = AmazonScraper()
-    shp_scraper = ShopeeScraper()
+    ml_hub_scraper = MercadoLivreHubScraper()
+    # amz_scraper = AmazonScraper()
+    # shp_scraper = ShopeeScraper()
 
     # Iniciar escuta de comandos
     telegram_handlers = {
@@ -212,6 +215,7 @@ async def run_bot():
     last_cleanup = datetime.now().date()
 
     while True:
+      try:
         cycle_count += 1
         current_date = datetime.now().date()
 
@@ -233,26 +237,63 @@ async def run_bot():
                 try:
                     deal = None
                     if "mercadolivre" in url: deal = await ml_scraper.fetch_product_details(url)
-                    elif "amazon" in url: deal = await amz_scraper.fetch_product_details(url)
-                    elif "shopee" in url: deal = await shp_scraper.fetch_product_details(url)
+                    # elif "amazon" in url: deal = await amz_scraper.fetch_product_details(url)
+                    # elif "shopee" in url: deal = await shp_scraper.fetch_product_details(url)
 
                     if deal:
                         # Para links manuais, usamos o link fornecido (que já pode ser de afiliado)
                         # e enviamos para o CANAL (to_admin=False)
                         await notifier.send_deal(deal, get_category_hashtags(deal.title), to_admin=False)
                         db.add_sent_deal(deal)
-                except: pass
+                except Exception as e:
+                    logger.error(f"Erro ao processar link manual {url}: {e}")
             clear_manual_links()
 
-        # 1-3. Buscas Automáticas (Estas vão apenas para o seu PRIVADO)
+        try:
+             # 1-3. Buscas Automáticas
+            if hot_keywords:
+                      # Mercado Livre (Via Hub de Afiliados - Autenticado)
+                if cycle_count % ML_FREQUENCY == 0:
+                    try:
+                         logger.info(f"Busca ML Hub (Ganhos Extras)...")
+                         deals = await ml_hub_scraper.fetch_my_deals()
+                         logger.info(f"DEBUG: Scraper retornou {len(deals)} ofertas.")
+                         all_deals.extend(deals)
+                         logger.info(f"DEBUG: all_deals agora tem {len(all_deals)} itens.")
+                    except Exception as e:
+                        logger.error(f"Erro no scraper ML Hub: {e}", exc_info=True)
+
+                # Amazon (DISABLED)
+                # if cycle_count % AMZ_FREQUENCY == 0:
+                #     try:
+                #         logger.info("Busca Amazon...")
+                #         for kw in hot_keywords:
+                #              deals = await amz_scraper.search_keyword(kw)
+                #              all_deals.extend(deals)
+                #              await asyncio.sleep(random.uniform(5, 15)) # Rate limiting
+                #     except Exception as e:
+                #          logger.error(f"Erro no scraper Amazon: {e}", exc_info=True)
+
+                # Shopee (DISABLED)
+                # if cycle_count % SHP_FREQUENCY == 0:
+                #     try:
+                #         logger.info("Busca Shopee...")
+                #         for kw in hot_keywords:
+                #             deals = await shp_scraper.search_keyword(kw)
+                #             all_deals.extend(deals)
+                #             await asyncio.sleep(random.uniform(5, 15)) # Rate limiting
+                #     except Exception as e:
+                #         logger.error(f"Erro no scraper Shopee: {e}", exc_info=True)
+        except Exception as e:
+            logger.error(f"Erro crítico no bloco de buscas automáticas: {e}", exc_info=True)
         if all_deals:
             unique_deals = {d.url: d for d in all_deals}.values()
             for deal in unique_deals:
                 if any(w in deal.title.lower() for w in blacklist): continue
 
                 if not db.is_deal_sent(deal.url, deal.price):
-                    # Alerta para o ADMIN (to_admin=True)
-                    await notifier.send_deal(deal, get_category_hashtags(deal.title), to_admin=True)
+                    # Enviar direto para o CANAL (to_admin=False)
+                    await notifier.send_deal(deal, get_category_hashtags(deal.title), to_admin=False)
                     db.add_sent_deal(deal)
                     await asyncio.sleep(2)
 
@@ -265,8 +306,13 @@ async def run_bot():
             await asyncio.wait_for(SCAN_EVENT.wait(), timeout=1800)
         except asyncio.TimeoutError:
             pass
+        except Exception as e:
+             logger.error(f"Erro durante a espera do ciclo: {e}")
 
         SCAN_EVENT.clear() # Reseta o sinal para o próximo ciclo
+      except Exception as e:
+        logger.error(f"CRASH NO LOOP PRINCIPAL: {e}", exc_info=True)
+        await asyncio.sleep(60) # Espera 1 minuto antes de tentar reiniciar para não flodar log
 
 if __name__ == "__main__":
     try: asyncio.run(run_bot())

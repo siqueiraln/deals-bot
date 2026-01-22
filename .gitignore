@@ -16,3 +16,8 @@ logs/
 # Playwright
 .playwright/
 ms-playwright/
+
+# Sensitive Data
+cookies.json
+.agents/
+agents/
