@@ -5,13 +5,19 @@ from models.trending_term import TrendingTerm
 def calculate_deal_score(deal: Deal, trending_terms: List[TrendingTerm]) -> float:
     score = 0
     
-    # --- FATOR 1: BASE SCORE (10 pts) ---
-    # Só por existir e ser válido, já ganha 10 pontos. Ajuda a não zerar.
-    score += 10
+    # --- FATOR 1: BASE SCORE (20 pts) ---
+    # Só por existir e ser válido, já ganha 20 pontos.
+    score += 20
 
-    # --- FATOR 2: TENDÊNCIA (45 pts) ---
+    # --- FATOR 2: TENDÊNCIA / ESTRATÉGIA (45 pts) ---
     # Se é o que o povo quer, tem peso MUITO alto.
     is_trending = False
+    
+    # Se for da estratégia de volume (Categoria Específica), ganha bonus forte
+    # O usuário pediu para priorizar volume em categorias quentes
+    if hasattr(deal, 'strategy') and deal.strategy == 'volume':
+        score += 30 # Bonus de Categoria Volume
+        
     deal_title_lower = deal.title.lower()
     
     for trend in trending_terms:

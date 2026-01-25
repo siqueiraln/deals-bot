@@ -63,6 +63,57 @@ class MercadoLivreSearchScraper:
                 
         return deals
 
+    async def scrape_category_url(self, category_url: str, max_results: int = 15) -> list[Deal]:
+        """Busca produtos diretamente de uma URL de categoria."""
+        deals = []
+        print(f"📂 Scraping Category URL: {category_url}...")
+        
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            page = await browser.new_page()
+            
+            try:
+                await page.set_extra_http_headers({
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                })
+                
+                await page.goto(category_url, wait_until="domcontentloaded", timeout=60000)
+                
+                # Check different result container types (same as search)
+                cards = []
+                # Type 1: Standard Search
+                cards = await page.query_selector_all("li.ui-search-layout__item")
+                # Type 2: Grid View
+                if not cards:
+                    cards = await page.query_selector_all("div.ui-search-result__wrapper")
+                # Type 3: Poly Card (Modern)
+                if not cards:
+                    cards = await page.query_selector_all(".poly-card")
+                
+                print(f"   category items found: {len(cards)}")
+                
+                count = 0
+                for card in cards:
+                    if count >= max_results: break
+                    
+                    try:
+                        # Extract logic is same
+                        deal = await self._extract_deal_from_card(card, "Category Volume")
+                        if deal:
+                            # Marcar estratégia para scoring
+                            deal.strategy = "volume" 
+                            deals.append(deal)
+                            count += 1
+                    except Exception as e:
+                        continue
+                        
+            except Exception as e:
+                print(f"❌ Error scraping category: {e}")
+            finally:
+                await browser.close()
+                
+        return deals
+
     async def _extract_deal_from_card(self, card, keyword) -> Deal:
         """Extrai dados de um card de produto usando Playwright."""
         
