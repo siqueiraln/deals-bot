@@ -1,0 +1,207 @@
+{
+  "name": "Gerar Link Mercado Livre",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "link"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -416,
+        0
+      ],
+      "id": "c4355c66-f10c-4b41-a269-78e6d9d3afce",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://www.mercadolivre.com.br/affiliate-program/api/v2/affiliates/createLink",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "application/json, text/plain, */*"
+            },
+            {
+              "name": "accept-language",
+              "value": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7"
+            },
+            {
+              "name": "origin",
+              "value": "https://www.mercadolivre.com.br"
+            },
+            {
+              "name": "priority",
+              "value": "u=1, i"
+            },
+            {
+              "name": "referer",
+              "value": "https://www.mercadolivre.com.br/afiliados/linkbuilder"
+            },
+            {
+              "name": "sec-ch-ua",
+              "value": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\""
+            },
+            {
+              "name": "user-agent",
+              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Cookie",
+              "value": "={{ $json.cookie }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"urls\": [\"{{ $json.link }}\"],\n  \"tag\": \"{{ $json.tag_afiliado }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        32,
+        0
+      ],
+      "id": "45a7bcee-1868-4972-9aa8-5151f92d161d",
+      "name": "Encurtar link mercado livre"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "8f1a9082-324c-43f3-9479-a96e881e6e9d",
+              "name": "link",
+              "value": "={{ $json.urls[0].short_url }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        256,
+        0
+      ],
+      "id": "f9ebe580-336f-4b67-be64-0e0e0f424cb2",
+      "name": "Obter link"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "0da4b18e-2387-45dc-b479-b80efcc71719",
+              "name": "link",
+              "value": "={{ $json.link }}",
+              "type": "string"
+            },
+            {
+              "id": "6e4398ee-f8db-4baa-b0fb-8076fab4425e",
+              "name": "tag_afiliado",
+              "value": "5520240814151002",
+              "type": "string"
+            },
+            {
+              "id": "b2c7203b-64da-46f5-a603-526321a1a419",
+              "name": "cookie",
+              "value": "_d2id=652f1e1a-6dc9-4185-8108-ca71b091b3b7; ftid=ksdwhctr2WKEu0omOB5TQA6D9EYJH0FZ-1762303463752; _gcl_au=1.1.948024944.1762543432; __rtbh.uid=%7B%22eventType%22%3A%22uid%22%2C%22id%22%3A%22543354346%22%2C%22expiryDate%22%3A%222026-11-07T19%3A23%3A52.539Z%22%7D; __rtbh.lid=%7B%22eventType%22%3A%22lid%22%2C%22id%22%3A%22Fv506qDUveWSPDC1Q4KR%22%2C%22expiryDate%22%3A%222026-11-07T19%3A23%3A52.539Z%22%7D; _fbp=fb.2.1762543432559.794675754491825538; _cq_duid=1.1762543432.bmKOXjVrgFoaTqnb; _pin_unauth=dWlkPU9UQXhNMkl4TURNdE5qY3pOaTAwTmpFekxXRmtaVEl0TnpKallURTVOV1ZpTTJSaw; _tt_enable_cookie=1; _ttp=01K9FWCX1JJCY258SXCW41FFKS_.tt.2; orguserid=Z040ThTtd499h; orgnickp=5520240814151002; ssid=ghy-111316-tnIGLx7pxS8AkX2vUzOqq9URTW0z6O-__-1944609557-__-1857761980278--RRR_0-RRR_0; orguseridp=1944609557; _csrf=SJzWNJrt8uS1qTblyyrvk0_g; cookiesPreferencesLoggedFallback=%7B%22userId%22%3A1944609557%2C%22categories%22%3A%7B%22advertising%22%3Atrue%2C%22functionality%22%3Atrue%2C%22performance%22%3Atrue%2C%22traceability%22%3Atrue%7D%7D; cookiesPreferencesNotLogged=%7B%22categories%22%3A%7B%22advertising%22%3Atrue%2C%22functionality%22%3Atrue%2C%22performance%22%3Atrue%2C%22traceability%22%3Atrue%7D%7D; c_Zfwxvk=1; cp=88220000; ml_cart-quantity=3; c_ui-navigation=6.7.0; _gcl_gs=2.1.k1$i1768367191$u124475286; _hjSessionUser_1160754=eyJpZCI6IjVkNGFmZWY2LThhN2MtNTJiNS1hYWVmLWVkN2Q3NGRjMWFlMSIsImNyZWF0ZWQiOjE3Njc4MzQyNzY0NTksImV4aXN0aW5nIjp0cnVlfQ==; _gcl_aw=GCL.1768367196.CjwKCAiA95fLBhBPEiwATXUsxDtCIl5qE8wEDfCg34ECeyEwIpiz2ZwokOgBnXWheBwSBFlz1Q4VSBoCEX4QAvD_BwE; _mldataSessionId=eacd9ef1-6fe3-473d-977d-6ed204c70d7c; cookiesPreferencesLogged=%7B%22userId%22%3A1944609557%2C%22categories%22%3A%7B%22advertising%22%3Atrue%2C%22functionality%22%3Atrue%2C%22performance%22%3Atrue%2C%22traceability%22%3Atrue%7D%7D; nsa_rotok=eyJhbGciOiJSUzI1NiIsImtpZCI6IjMiLCJ0eXAiOiJKV1QifQ.eyJpZGVudGlmaWVyIjoiZGE2YjEzMjgtNGZkOS00NzFiLTk3NTUtNGQ5M2U5MmY0YjQ4Iiwicm90YXRpb25faWQiOiI4Y2U1MmI0ZC1iMmU4LTRlMDAtODUwMS05M2RiZGU3NGEwZWUiLCJwbGF0Zm9ybSI6Ik1MIiwicm90YXRpb25fZGF0ZSI6MTc2ODM3Mzg2NSwiZXhwIjoxNzcwOTY1MjY1LCJqdGkiOiI2NjMyZmFhNy00M2UxLTQ0MTYtYjU3Ni0wNjYzYmY2ODA3MzkiLCJpYXQiOjE3NjgzNzMyNjUsInN1YiI6ImRhNmIxMzI4LTRmZDktNDcxYi05NzU1LTRkOTNlOTJmNGI0OCJ9.iyT5_V3Hy1KUR96dRvKgxyzLGv6-ssFbS4l12Ai2RKXx73kS8cBjE0qJ2HxioYpHMBl9WOQdZcBn3Gm3AghfTgYMeFOO2TvuaniuCEuu0z_1z5xgmVsOWc0Bbgst2kw3QNj4NXPDEe0RCQe6WGKL9_qz5-pKRpdcmXe_31DsucWfoPZBec8-QWtV1GF_cdAE_fGN0IECYGMGiHU_a6R7_43S1_Pujv_rg0-WIYy8qQb9EeeoXwMBklQ2BLnoRkCI4KwLtitdSRS5rlmEnyfYolksRta3Ql3gvR2OLpMB2yweWbpRdSCYmrSUwf4r2vDqAHNqtGuVXD-SB5omyys83A; hide-cookie-banner=1944609557-COOKIE_PREFERENCES_ALREADY_SET; _hjSessionUser_720738=eyJpZCI6IjUyNmM4NTc4LWU3OWYtNWUyOS04YjM1LWE2ZjVhODEwZjg3MCIsImNyZWF0ZWQiOjE3NjgzNjcxODA4OTcsImV4aXN0aW5nIjp0cnVlfQ==; _hjSession_720738=eyJpZCI6ImE5M2M0ZTc4LTZkN2YtNGYwZC1hYjZhLTc5OWRkZDg4OGU5MiIsImMiOjE3NjgzNzM0MDk2NjcsInMiOjAsInIiOjAsInNiIjowLCJzciI6MCwic2UiOjAsImZzIjowLCJzcCI6MH0=; _cq_suid=1.1768373412.3B1J806O1caiYZDR; ttcsid_C9SJ5SBC77UADFMAH8T0=1768373412945::qDPLaHRAtnxKPbysjJtw.2.1768373412952.1; _uetsid=469cc360f11511f085e0318adce4f406; _uetvid=4ba35e60bc0f11f08f3b9509062d9acb; ttcsid=1768373412946::rIv23NgyGF_MEvdHZnP9.2.1768373413189.0; ttcsid_CFVSC2JC77U0ARCJTCJ0=1768373412947::V01ZDwt7s6_ueHdbVzwD.2.1768373413189.0; cto_bundle=el12Vl9iWjVrRTN2YjJZdyUyRnNTM1VlTVdkYVhjcnVNeEMwMXRBY2o2cEFKSXAyS1lkQmFROHlKZ2dqWnAzNjVoWlhGa0tpUFRxeiUyQlBaT0xvYTVEbWcwcjBFN1dKSWhId1R0cEF2SyUyQjFiSFd1VEJqZGdtV2FlVWZsYW81WXc0VzBiWjZMVnV3QVp0alZFS200cnExU3ZBV0MxQk92S3hMSUx5d0Q5dWZrNFJNbWM4bWhjRTVJN283MnNIZjlnUWZ5NlZkc3JuNERpOVhMOW5UaW03N25WTkZId2x3JTNEJTNE",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -192,
+        0
+      ],
+      "id": "5b001555-7214-4902-ac29-76b493bdb5b1",
+      "name": "Setar dados"
+    },
+    {
+      "parameters": {
+        "content": "OBTENHA SEUS DADOS NA PÁGINA DE GERADOR DE LINKS NA PÁGINA DE AFILIADO.\n\n1- ACESSA A PÁGINA DE AFILIADOS\n(https://www.mercadolivre.com.br/afiliados)\n2- CLICA EM GERADOR DE LINKS\n3- ABRE O DEV CONSOLE COM F12 OU INSPECIONAR E VÁ ATÉ A ABA NETWORK\n4- COLA UMA URL DE PRODUTO E CLICA PARA GERAR O LINK\n5- NO CONSOLE, CLIQUE NA CHAMADA 'CreateLink' E PEGUE SEUS DADOS, COOKIE E TAG!\n6- COLOQUE NO SETAR DADOS E PUBLICA O SUB-WORKFLOW",
+        "height": 256,
+        "width": 480,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -432,
+        -304
+      ],
+      "typeVersion": 1,
+      "id": "fbe9e6ca-3427-4868-b3e0-f09c3b2c233a",
+      "name": "Sticky Note"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Setar dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Encurtar link mercado livre": {
+      "main": [
+        [
+          {
+            "node": "Obter link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Setar dados": {
+      "main": [
+        [
+          {
+            "node": "Encurtar link mercado livre",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "ccfa57ce-69e9-4402-a3f2-c32cb7497be2",
+  "meta": {
+    "instanceId": "ac9512b600e9c78ff3a8fdaf58fc5f0623a9386c4de61bb442679fcf2329d57b"
+  },
+  "id": "vVp36svUC2mIeJW4",
+  "tags": [
+    {
+      "updatedAt": "2026-01-13T21:14:42.587Z",
+      "createdAt": "2026-01-13T21:14:36.807Z",
+      "id": "30MJkUglPn3tnqAR",
+      "name": "Aulas Youtube"
+    }
+  ]
+}

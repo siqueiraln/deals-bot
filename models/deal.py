@@ -12,3 +12,4 @@ class Deal(BaseModel):
     store: str
     image_url: Optional[str] = None
     timestamp: datetime = datetime.now()
+    score: float = 0.0

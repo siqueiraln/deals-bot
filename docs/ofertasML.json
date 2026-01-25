@@ -1,0 +1,254 @@
+{
+  "name": "Ofertas do Dia ML",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// Capturar os valores de todos os itens\nlet items = $items();\n\n// Iterar sobre os itens e formatar o valor de parcelamento\nfor (let item of items) {\n  let parcelamento = item.json[\"parcelamento\"];\n  \n  // Garantir que o valor é uma string\n  if (typeof parcelamento !== 'string') {\n    parcelamento = parcelamento.toString();\n  }\n\n  // Expressão regular para capturar a quantidade de parcelas e a informação de \"sem juros\"\n  let regex = /(\\d{1,2})x R\\$ [\\d.,]+ sem juros/;\n\n  // Extrair e formatar a quantidade de parcelas e a informação de \"sem juros\"\n  let match = parcelamento.match(regex);\n  if (match) {\n    // Criar a string desejada\n    let formattedParcelamento = `Parcelamento em ${match[1]}x sem juros`;\n\n    // Atualizar o valor formatado no item\n    item.json.parcelamentoFormatado = formattedParcelamento;\n  } else {\n    // Manter o valor original se não houver correspondência\n    item.json.parcelamentoFormatado = parcelamento;\n  }\n}\n\n// Retornar os itens atualizados\nreturn items;"
+      },
+      "id": "f97ee96b-8fd5-4b50-8e2f-1393e9e2aaff",
+      "name": "Filtrar dados",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -112,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "produtos",
+              "cssSelector": "div.items-with-smart-groups",
+              "returnValue": "html",
+              "returnArray": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f1cbf640-c580-485a-917a-33eb574bf209",
+      "name": "Extrair HTML",
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.1,
+      "position": [
+        -560,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "dataPropertyName": "produtos",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "titulo",
+              "cssSelector": "a.poly-component__title",
+              "returnArray": true
+            },
+            {
+              "key": "imagem",
+              "cssSelector": "img.poly-component__picture",
+              "returnValue": "attribute",
+              "attribute": "data-src",
+              "returnArray": true
+            },
+            {
+              "key": "link",
+              "cssSelector": "a.poly-component__title",
+              "returnValue": "attribute",
+              "attribute": "href",
+              "returnArray": true
+            },
+            {
+              "key": "preço(antes)",
+              "cssSelector": "s.andes-money-amount.andes-money-amount--previous.andes-money-amount--cents-comma",
+              "returnArray": true
+            },
+            {
+              "key": "preço(atual)",
+              "cssSelector": "span.andes-money-amount.andes-money-amount--cents-superscript",
+              "returnArray": true
+            },
+            {
+              "key": "desconto(porcentagem)",
+              "cssSelector": "span.andes-money-amount__discount",
+              "returnArray": true
+            },
+            {
+              "key": "parcelamento",
+              "cssSelector": "span.poly-price__installments",
+              "returnArray": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "87bed6df-7034-4c69-8ba9-a83e2744f561",
+      "name": "Extrair Produtos",
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.1,
+      "position": [
+        -336,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "titulo, imagem, link, ['preço(antes)'], ['preço(atual)'], ['desconto(porcentagem)'], parcelamentoFormatado",
+        "options": {}
+      },
+      "id": "621448aa-965d-40d2-9cf2-d17720797c3e",
+      "name": "Listar Produtos",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        112,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://www.mercadolivre.com.br/ofertas",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "page",
+              "value": "={{ $json.page }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0b8297e5-4747-4c84-ba03-feea1d980761",
+      "name": "Obter HTML ML",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -784,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "page",
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1008,
+        96
+      ],
+      "id": "3061e26f-5e20-4732-ae08-eaa10f4ecc83",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "content": "NESSE FLUXO NÃO PRECISA SETAR NENHUM DADOS, APENAS PUBLICAR O FLUXO.",
+        "height": 80,
+        "width": 592,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1024,
+        -48
+      ],
+      "typeVersion": 1,
+      "id": "814240ff-0b9c-4229-92c2-97f82063f8d2",
+      "name": "Sticky Note"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Filtrar dados": {
+      "main": [
+        [
+          {
+            "node": "Listar Produtos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extrair HTML": {
+      "main": [
+        [
+          {
+            "node": "Extrair Produtos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extrair Produtos": {
+      "main": [
+        [
+          {
+            "node": "Filtrar dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Listar Produtos": {
+      "main": [
+        []
+      ]
+    },
+    "Obter HTML ML": {
+      "main": [
+        [
+          {
+            "node": "Extrair HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Obter HTML ML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "e4246064-39b0-4e83-8ab1-41fc52ec32b4",
+  "meta": {
+    "instanceId": "ac9512b600e9c78ff3a8fdaf58fc5f0623a9386c4de61bb442679fcf2329d57b"
+  },
+  "id": "Fz4i8R4DZItzRatS",
+  "tags": [
+    {
+      "updatedAt": "2026-01-13T21:14:42.587Z",
+      "createdAt": "2026-01-13T21:14:36.807Z",
+      "id": "30MJkUglPn3tnqAR",
+      "name": "Aulas Youtube"
+    }
+  ]
+}

@@ -1,61 +1,151 @@
-# Bot de Promoções (Versão: ML Hub 🚀)
+# 🤖 Bot de Promoções Inteligente
 
-Bot focado em automatizar o **Hub de Afiliados do Mercado Livre**, minerando ofertas com alta comissão ("Ganhos Extras") e gerando links de afiliado automaticamente.
+Bot automatizado para **Mercado Livre Afiliados** com inteligência de mercado. Monitora tendências em tempo real, classifica ofertas por potencial de conversão e opera de forma autônoma ou manual.
 
-## 🚀 Funcionalidades Atuais
+## ✨ Funcionalidades
 
-- **Mercado Livre Hub**: Acessa sua conta via cookies, encontra ofertas > 10% de comissão.
-- **Auto-Link Gen**: Clica automaticamente no botão "Compartilhar" para gerar o link `/sec/`.
-- **Filtro de Comissão**: Ignora ofertas com margem baixa.
-- **Envio Automático**: Posta ofertas validadas diretamente no Canal do Telegram.
-- **Notificação Admin**: Avisa sobre erros, status e comandos.
+### 🎯 Core
+- **Hub de Afiliados ML**: Acessa sua conta via cookies e minera ofertas com comissão > 10%
+- **Geração Automática de Links**: Clica em "Compartilhar" e extrai links `/sec/` automaticamente
+- **Envio para Telegram**: Posta ofertas aprovadas no seu canal público
 
-**Nota:** Os scrapers de Amazon e Shopee foram desativados temporariamente para foco no ML.
+### 🧠 Inteligência de Mercado (NOVO)
+- **Monitor de Tendências**: Rastreia as 50 buscas mais quentes do Mercado Livre diariamente
+- **Sistema de Scoring**: Classifica ofertas (0-100) baseado em:
+  - 40% Comissão de afiliado
+  - 35% Relevância com tendências
+  - 25% Desconto real sobre preço original
+- **Cache Inteligente**: Atualiza tendências a cada 6h (otimizado para baixo consumo)
 
-## 🛠️ Pré-requisitos
+### 🤖 Modo Autônomo (NOVO)
+- **Modo Manual**: Você aprova cada oferta antes de postar (padrão)
+- **Modo Autônomo**: Bot posta automaticamente ofertas com score > 60
+- **Toggle Simples**: Alterne entre modos com `/auto`
 
-1.  Python 3.10+ e Node.js.
-2.  Conta de Afiliado Mercado Livre aprovada.
-3.  Extensão **EditThisCookie** (Chrome/Edge) para extrair o arquivo `cookies.json`.
+### ✍️ Copywriting Inteligente (NOVO)
+- **Headlines com IA**: Gemini gera títulos profissionais e atrativos
+- **Formatação BRL**: Preços no padrão brasileiro (R$ 1.250,00)
+- **Cálculo de Desconto**: Exibe percentual de economia automaticamente
+- **Layout Minimalista**: Mensagens limpas e diretas ao ponto
 
-## ⚙️ Instalação e Configuração
+## 🚀 Quick Start
 
-1.  **Clone e Instale:**
-    ```bash
-    git clone [seu-repo]
-    python -m venv venv
-    venv\Scripts\activate
-    pip install -r requirements.txt
-    playwright install chromium
-    ```
+### 1. Instalação
 
-2.  **Configuração de Ambiente (.env):**
-    Renomeie `.env.example` para `.env` e preencha:
-    - `TELEGRAM_BOT_TOKEN`: Token do BotFather.
-    - `TELEGRAM_CHAT_ID`: ID do seu CANAL de ofertas (onde o bot posta).
-    - `ADMIN_USER_ID`: Seu ID pessoal (para comandos de controle).
+```bash
+git clone [seu-repo]
+cd deals-bot
+python -m venv venv
+venv\Scripts\activate  # Windows
+pip install -r requirements.txt
+playwright install chromium
+```
 
-3.  **Cookies do Mercado Livre (CRÍTICO):**
-    - Logue no Mercado Livre e acesse o [Hub de Afiliados](https://www.mercadolivre.com.br/afiliados/hub).
-    - Use a extensão *EditThisCookie*, exporte os cookies para JSON.
-    - Salve como `cookies.json` na raiz do projeto.
-    - **Importante:** Se o bot parar de logar, renove este arquivo.
+### 2. Configuração
 
-## 🎮 Comandos (Admin Privado)
+**Arquivo `.env`** (renomeie `.env.example`):
+```env
+TELEGRAM_BOT_TOKEN=seu_token_aqui
+TELEGRAM_CHAT_ID=@seu_canal
+ADMIN_USER_ID=seu_id_telegram
+GEMINI_API_KEY=sua_chave_gemini  # Para copywriting com IA
+```
 
-Fale com o bot no privado para controlar:
+**Cookies do Mercado Livre** (`data/cookies.json`):
+1. Logue no [Hub de Afiliados](https://www.mercadolivre.com.br/afiliados/hub)
+2. Use a extensão [EditThisCookie](https://chrome.google.com/webstore/detail/editthiscookie/)
+3. Exporte cookies como JSON
+4. Salve em `data/cookies.json`
 
-- **`/status`**: Resumo de ciclos e ofertas enviadas.
-- **`/scan`**: Força uma busca imediata no Hub.
-- **`/add [link]`**: Processa um link manual na hora.
+### 3. Executar
 
-## 📊 Estratégia de Busca
+```bash
+python main.py
+```
 
-- **Modo Atual:** Busca Autenticada (ML Hub).
-  - Ignora `hot_keywords.txt` (busca o que o ML recomenda no painel).
-  - Ciclos de verificação a cada 30 minutos (ajustável em `ML_FREQUENCY`).
+## 📖 Comandos
 
-- **Segurança:**
-  - `playwright-stealth`: Camuflagem para evitar bloqueios.
-  - `cookies.json`: Sessão real de usuário.
-  - Rate Limiting e Intervalos Aleatórios.
+| Comando | Descrição |
+|---------|-----------|
+| `/status` | Mostra status do bot e modo ativo |
+| `/auto` | Liga/desliga modo autônomo |
+| `/scan` | Força busca imediata |
+| `/hot [termo]` | Adiciona palavra-chave à busca |
+| `/block [termo]` | Bloqueia termo no título |
+
+📚 **Documentação completa:** [docs/COMMANDS.md](docs/COMMANDS.md)
+
+## 🎯 Como Funciona
+
+```mermaid
+graph LR
+    A[Tendências ML] --> B[Hub de Ofertas]
+    B --> C[Sistema de Score]
+    C --> D{Score > 60?}
+    D -->|Sim + Auto Mode| E[Posta no Canal]
+    D -->|Não ou Manual| F[Envia para Admin]
+    F --> G[Admin Aprova]
+    G --> E
+```
+
+## 📊 Estrutura do Projeto
+
+```
+deals-bot/
+├── main.py                 # Loop principal
+├── scrapers/
+│   ├── mercadolivre_hub.py    # Scraper do Hub
+│   └── mercadolivre_trends.py # Monitor de tendências
+├── core/
+│   ├── scoring.py             # Sistema de pontuação
+│   ├── autonomous_mode.py     # Gerenciador de modo
+│   └── database.py            # Controle de duplicatas
+├── services/
+│   ├── notifier.py            # Telegram bot
+│   └── copywriter.py          # Geração de copy com IA
+├── data/
+│   ├── cookies.json           # Sessão ML (você cria)
+│   ├── trends_cache.json      # Cache de tendências
+│   └── bot_config.json        # Configuração de modo
+└── docs/
+    ├── COMMANDS.md            # Referência de comandos
+    └── trends_integration_plan.md  # Documentação técnica
+```
+
+## 🔧 Configurações Avançadas
+
+**`main.py` - Frequências:**
+```python
+ML_FREQUENCY = 1        # Ciclos entre buscas no Hub
+REPORT_FREQUENCY = 10   # Ciclos entre relatórios
+```
+
+**`core/scoring.py` - Pesos do Score:**
+```python
+COMMISSION_WEIGHT = 40  # Peso da comissão
+TREND_WEIGHT = 35       # Peso da tendência
+DISCOUNT_WEIGHT = 25    # Peso do desconto
+```
+
+## 🛡️ Segurança
+
+- ✅ `playwright-stealth`: Anti-detecção de bot
+- ✅ Cookies de sessão real (não usa credenciais)
+- ✅ Rate limiting inteligente
+- ✅ Intervalos aleatórios entre requisições
+
+## 📝 Logs
+
+Logs salvos em `logs/bot.log` com rotação automática.
+
+## 🤝 Contribuindo
+
+Contribuições são bem-vindas! Veja [CONTRIBUTING.md](CONTRIBUTING.md) para guidelines.
+
+## 📄 Licença
+
+MIT License - veja [LICENSE](LICENSE) para detalhes.
+
+---
+
+**Dúvidas?** Abra uma [issue](../../issues) ou consulte a [documentação completa](docs/).

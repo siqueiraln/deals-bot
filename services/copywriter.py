@@ -31,25 +31,38 @@ class Copywriter:
             return f"🔥 <b>{deal.title}</b>"
 
         prompt = f"""
-        Você é um expert em copywriting para notificações curtas.
+        Você é um expert em copywriting para ofertas no Telegram.
         
         Produto: {deal.title}
         Preço: R$ {deal.price:.2f}
         
-        Sua missão: Escreva APENAS uma headline curta (máximo 50 caracteres) e impactante.
-        Use gatilhos de urgência ou curiosidade.
+        Sua missão: Escreva uma headline CURTA e PROFISSIONAL (máx 50 chars).
         
-        Regras:
-        1. APENAS O TEXTO DA HEADLINE. Nada mais.
-        2. Sem aspas, sem markdown, sem emojis no início.
-        3. Exemplo: "PREÇO DE ERRO! CORRE AGORA" ou "SÓ HOJE: MENOR PREÇO HISTÓRICO"
+        Diretrizes:
+        - Foco no benefício ou no desconto real.
+        - Evite termos apelativos como "PREÇO DE ERRO" ou "CORRE".
+        - Use emojis moderados no início (1 apenas).
+        - Sem CAPS LOCK excessivo.
+        
+        Exemplos Bons:
+        - "⚡ Creatina Growth Original em Oferta"
+        - "📉 Menor preço dos últimos 30 dias"
+        - "🔥 iPhone 13 com preço de Black Friday"
+        
+        Exemplos Ruins:
+        - "PREÇO DE ERRO CORRE AGORA"
+        - "URGENTE!!! LIQUIDAÇÃO TOTAL"
         """
 
         try:
             response = await self.model.generate_content_async(prompt)
             print(f"🤖 IA Gerou Texto: {response.text[:50]}...") # Log para confirmar
-            return response.text.replace("**", "").strip() # Remove markdown
+            text = response.text.replace("**", "").strip()
+            # Remove aspas se a IA colocar
+            if text.startswith('"') and text.endswith('"'):
+                text = text[1:-1]
+            return text
         except Exception as e:
             print(f"❌ Erro na IA Copywriter: {e}")
-            return f"🔥 <b>{deal.title}</b>"
+            return f"🔥 {deal.title[:40]}..."
 

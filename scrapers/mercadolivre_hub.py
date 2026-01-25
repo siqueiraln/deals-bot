@@ -100,13 +100,13 @@ class MercadoLivreHubScraper:
                 cards = soup.select(".poly-card")
                 print(f"Found {len(cards)} items in Hub.")
 
-                # LIMIT TO 3 FOR TESTING
+                # Hybrid Strategy: Fetch 30 deals, generate affiliate links only for high-score ones
                 deal_count = 0
-                max_deals = 15
+                max_deals = 30
 
                 for card in cards:
                     if deal_count >= max_deals:
-                        print(f"⚠️ Limite de {max_deals} ofertas atingido (modo teste)")
+                        print(f"⚠️ Limite de {max_deals} ofertas atingido")
                         break
                     try:
                         # Title and Link
@@ -160,32 +160,14 @@ class MercadoLivreHubScraper:
                             title=title,
                             price=price,
                             url=url,
-                            store="Mercado Livre Hub",
+                            store="Mercado Livre",
                             image_url=image_url
                         )
                         deal.discount_percentage = commission_percent if is_extra_commission else 0
                         
-                        # Affiliate Link Generation (Automated)
-                        # Only generate for valid deals that we are going to use
-                        if deal.url.startswith("http"): # Ensure valid URL
-                            try:
-                                print(f"   Generating affiliate link for: {deal.title[:30]}...")
-                                affiliate_link, store_name, original_price = await self._get_affiliate_link(page, deal.url)
-                                if affiliate_link:
-                                    deal.url = affiliate_link
-                                    print(f"   ✅ Link generated: {deal.url}")
-                                else:
-                                    print("   ⚠️ Failed to generate link.")
-                                
-                                # Update store name if found
-                                if store_name:
-                                    deal.store = store_name
-                                
-                                # Update original price if found
-                                if original_price:
-                                    deal.original_price = original_price
-                            except Exception as e:
-                                print(f"   ❌ Error generating link: {e}")
+                        # NOTE: Affiliate link generation moved to main.py
+                        # Only high-score deals (>= 40) will get affiliate links generated
+                        # This saves ~4 seconds per low-score deal
 
                         deals.append(deal)
                         deal_count += 1  # Increment counter
@@ -203,22 +185,83 @@ class MercadoLivreHubScraper:
             await browser.close()
         return deals
 
+    async def generate_affiliate_link_for_deal(self, deal: Deal) -> Deal:
+        """
+        Generates affiliate link for a single deal that has already been scored.
+        Updates deal.url, deal.store, and deal.original_price in-place.
+        Returns the updated deal.
+        
+        This is called AFTER scoring to avoid wasting time on low-score deals.
+        """
+        if not deal.url.startswith("http"):
+            return deal
+        
+        try:
+            # Launch browser for this single operation
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=True)
+                context = await browser.new_context()
+                
+                # Apply stealth
+                stealth = Stealth()
+                await stealth.apply_stealth_async(context)
+                
+                # Load and clean cookies (same as fetch_my_deals)
+                if os.path.exists(self.cookies_path):
+                    with open(self.cookies_path, 'r') as f:
+                        cookies = json.load(f)
+                        
+                        # Clean cookies to avoid sameSite validation errors
+                        clean_cookies = []
+                        for c in cookies:
+                            cookie = {
+                                'name': c['name'],
+                                'value': c['value'],
+                                'domain': c['domain'],
+                                'path': c['path'],
+                                'secure': c.get('secure', False),
+                                'httpOnly': c.get('httpOnly', False),
+                                'sameSite': 'Lax' if c.get('sameSite') not in ['Strict', 'Lax', 'None'] else c.get('sameSite')
+                            }
+                            clean_cookies.append(cookie)
+                        
+                        await context.add_cookies(clean_cookies)
+                
+                page = await context.new_page()
+                
+                print(f"   🔗 Generating affiliate link for: {deal.title[:40]}...")
+                affiliate_link, store_name, original_price = await self._get_affiliate_link(page, deal.url)
+                
+                if affiliate_link:
+                    deal.url = affiliate_link
+                    print(f"   ✅ Link generated successfully")
+                else:
+                    print("   ⚠️ Failed to generate link, using original URL")
+                
+                # Update store name if found
+                if store_name:
+                    deal.store = store_name
+                
+                # Update original price if found
+                if original_price:
+                    deal.original_price = original_price
+                
+                await browser.close()
+        except Exception as e:
+            print(f"   ❌ Error generating affiliate link: {e}")
+        
+        return deal
+
     async def _get_affiliate_link(self, page, product_url):
         """Navigates to product page and extracts: affiliate link, store name, and original price.
         Returns: (affiliate_link, store_name, original_price)
         """
         try:
-            # Open new page or use existing? 
-            # We are in a loop, reusing 'page' might lose the Hub context.
-            # Best to open a new tab/page.
-            new_page = await page.context.new_page()
+            # IMPORTANT: Reuse the existing page that already has cookies
+            # instead of creating a new one
             
-            # Stealth already applied to context? Yes, context has stealth.
-            # But let's be safe
-            stealth = Stealth()
-            await stealth.apply_stealth_async(new_page)
-
-            await new_page.goto(product_url, wait_until="domcontentloaded", timeout=45000)
+            # Navigate to product page
+            await page.goto(product_url, wait_until="domcontentloaded", timeout=45000)
             await asyncio.sleep(4) # Wait for toolbar
 
             # Extract store name and original price from product page
@@ -227,7 +270,7 @@ class MercadoLivreHubScraper:
             
             try:
                 # Get page content for parsing
-                content = await new_page.content()
+                content = await page.content()
                 soup = BeautifulSoup(content, 'html.parser')
                 
                 # Extract store name - look for seller info
@@ -267,43 +310,43 @@ class MercadoLivreHubScraper:
                 print(f"   ⚠️ Error extracting product details: {e}")
 
             # Click "Compartilhar"
-            share_btn = await new_page.query_selector("text=Compartilhar")
+            share_btn = await page.query_selector("text=Compartilhar")
             if not share_btn:
                 print("   ❌ 'Compartilhar' button not found.")
                 # Maybe dump page title to see if we are on the right page
-                print(f"   Current Title: {await new_page.title()}")
-                await new_page.close()
-                return None
+                print(f"   Current Title: {await page.title()}")
+                await page.close()
+                return (None, store_name, original_price)
             
             # Use JS click to bypass overlays/interceptors
             print("   Clicking 'Compartilhar' via JS...")
-            await new_page.evaluate("el => el.click()", share_btn)
+            await page.evaluate("el => el.click()", share_btn)
             
             # Wait for modal input with the link
             try:
                 # Wait for ANY text field in a dialog
-                await new_page.wait_for_selector("div[role='dialog'] input", timeout=10000)
+                await page.wait_for_selector("div[role='dialog'] input", timeout=10000)
                 print("   Modal dialog detected.")
             except:
                 print("   ❌ Modal did not appear after JS click.")
-                await new_page.close()
-                return None
+                await page.close()
+                return (None, store_name, original_price)
             
             # Allow time for API to fetch link inside the modal
             await asyncio.sleep(3)
             
             # Try to find input with value containing 'mercadolivre.com/sec/'
             # Strategy 1: Check inputs (failed previously, but keeping as fallback)
-            inputs = await new_page.query_selector_all("div[role='dialog'] input")
+            inputs = await page.query_selector_all("div[role='dialog'] input")
             for inp in inputs:
                 val = await inp.get_attribute("value")
                 if val and "/sec/" in val:
                     print(f"   ✨ Found link in INPUT: {val}")
-                    await new_page.close()
+                    await page.close()
                     return (val, store_name, original_price)
 
             # Strategy 2: Check Textarea "Texto sugerido" (User suggestion)
-            textareas = await new_page.query_selector_all("div[role='dialog'] textarea")
+            textareas = await page.query_selector_all("div[role='dialog'] textarea")
             print(f"   Found {len(textareas)} textareas in modal.")
             
             for ta in textareas:
@@ -316,35 +359,32 @@ class MercadoLivreHubScraper:
                 if match:
                     link = match.group(0)
                     print(f"   ✨ Found link in TEXTAREA: {link}")
-                    await new_page.close()
+                    await page.close()
                     return (link, store_name, original_price)
             
             # Strategy 3: Check generic text content of the dialog
-            dialog = await new_page.query_selector("div[role='dialog']")
+            dialog = await page.query_selector("div[role='dialog']")
             if dialog:
                 full_text = await dialog.inner_text()
                 match = re.search(r"https://(?:www\.)?mercadolivre\.com(?:\.br)?/sec/[\w]+", full_text)
                 if match:
                     link = match.group(0)
                     print(f"   ✨ Found link in DIALOG TEXT: {link}")
-                    await new_page.close()
+                    await page.close()
                     return (link, store_name, original_price)
 
             print("   ❌ No SEC link found in modal.")
-            await new_page.close()
+            await page.close()
             return (None, store_name, original_price)
 
         except Exception as e:
             print(f"   ❌ Link generation error: {e}")
-            try: await new_page.close()
+            # traceback.print_exc()
+            try: await page.close()
             except: pass
             return (None, None, None)
-
-        except Exception as e:
-            print(f"   Link generation error: {e}")
-            try: await new_page.close()
-            except: pass
-            return (None, None, None)
+            
+        return (None, None, None) # Emergency fallback
 
 if __name__ == "__main__":
     scraper = MercadoLivreHubScraper()

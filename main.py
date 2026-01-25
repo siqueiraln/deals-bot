@@ -12,14 +12,49 @@ from telegram.constants import ParseMode
 
 from scrapers.mercadolivre import MercadoLivreScraper
 from scrapers.mercadolivre_hub import MercadoLivreHubScraper
-from scrapers.amazon import AmazonScraper
-from scrapers.shopee import ShopeeScraper
+from scrapers.mercadolivre_trends import MercadoLivreTrendsScraper
+from scrapers.mercadolivre_search import MercadoLivreSearchScraper # NOVO
+# from scrapers.amazon import AmazonScraper
+# from scrapers.shopee import ShopeeScraper
 from affiliate.generator import AffiliateLinkGenerator
 from services.notifier import TelegramNotifier
 from core.database import Database
 from config.logger import logger
+from core.scoring import calculate_deal_score
+from core.autonomous_mode import AutonomousMode
+from utils.category_dedup import deduplicate_by_category
 
 load_dotenv()
+
+# Configurações
+ML_FREQUENCY = 1        # Ciclos entre buscas ML
+AMZ_FREQUENCY = 999     # (Desativado)
+SHP_FREQUENCY = 999     # (Desativado)
+REPORT_FREQUENCY = 10   # Ciclos entre relatórios de status
+
+# Trend Search Configuration
+MAX_TRENDS_PER_CYCLE = 3  # Reduced from 5 to avoid ban
+MAX_RESULTS_PER_TREND = 5  # Reduced from 10 for quality over quantity
+TREND_SEARCH_ENABLED = True  # Toggle feature on/off
+
+# Evergreen Search Configuration
+MAX_EVERGREEN_PER_CYCLE = 2  # Reduced from 3 to avoid ban
+MAX_RESULTS_PER_EVERGREEN = 5  # Reduced from 10 for quality over quantity
+EVERGREEN_SEARCH_ENABLED = True  # Toggle feature on/off
+EVERGREEN_TERMS_FILE = "data/evergreen_terms.txt"
+
+# Category Deduplication (NEW)
+ENABLE_CATEGORY_DEDUPLICATION = True
+CATEGORY_LIMITS = {
+    "relogio": 2,
+    "fone": 2,
+    "tenis": 2,
+    "notebook": 1,
+    "celular": 1,
+    "tablet": 1,
+    "monitor": 1,
+    "outros": 3,  # Produtos diversos
+}
 
 # --- Configurações ---
 ADMIN_USER_ID = os.getenv("ADMIN_USER_ID")
@@ -77,8 +112,14 @@ async def handle_scan(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update): return
     db = Database()
+    
+    from core.autonomous_mode import AutonomousMode
+    auto_mode = AutonomousMode()
+    status = auto_mode.get_status()
+    
     report = (
         "🤖 <b>Bot Online & Operante</b>\n\n"
+        f"📊 <b>Modo:</b> {status['mode']}\n"
         f"📉 <b>Banco de Dados:</b> {db.get_total_count()} itens\n"
         "✨ <i>Envie um link direto para postar agora!</i>"
     )
@@ -159,6 +200,8 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📖 <b>Guia de Comandos do Bot</b>\n\n"
         "🔗 <b>Links Diretos:</b> Basta colar um link no chat para postar.\n"
         "📊 <b>/status:</b> Resumo de atividade do bot.\n\n"
+        "🤖 <b>Modo de Operação:</b>\n"
+        "• <b>/auto:</b> Alterna entre modo Manual e Autônomo.\n\n"
         "🔥 <b>Busca Ativa (Keywords):</b>\n"
         "• <b>/hot [termo]:</b> Adiciona produto à busca.\n"
         "• <b>/hot_list:</b> Lista termos ativos.\n"
@@ -170,6 +213,40 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "💡 <i>Dica: Links manuais são limpos automaticamente após o envio!</i>"
     )
     await update.message.reply_text(help_text, parse_mode=ParseMode.HTML)
+
+async def handle_auto_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Toggle entre modo manual e autônomo."""
+    if not is_admin(update): 
+        return
+    
+    from core.autonomous_mode import AutonomousMode
+    auto_mode = AutonomousMode()
+    
+    new_state = auto_mode.toggle()
+    
+    if new_state:
+        emoji = "🤖"
+        mode = "AUTÔNOMO"
+        description = (
+            "O bot agora postará automaticamente ofertas com score alto (>60) "
+            "diretamente no canal. Ofertas com score médio (40-60) ainda "
+            "precisarão de sua aprovação."
+        )
+    else:
+        emoji = "👤"
+        mode = "MANUAL"
+        description = (
+            "O bot agora enviará todas as ofertas para você aprovar "
+            "antes de postar no canal."
+        )
+    
+    text = (
+        f"{emoji} <b>Modo {mode} Ativado</b>\n\n"
+        f"{description}\n\n"
+        f"💡 <i>Use /auto novamente para alternar.</i>"
+    )
+    
+    await update.message.reply_text(text, parse_mode=ParseMode.HTML)
 
 async def handle_direct_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message: return
@@ -189,6 +266,9 @@ async def run_bot():
 
     ml_scraper = MercadoLivreScraper()
     ml_hub_scraper = MercadoLivreHubScraper()
+    trends_scraper = MercadoLivreTrendsScraper()
+    ml_search_scraper = MercadoLivreSearchScraper() # NOVO
+    auto_mode = AutonomousMode()
     # amz_scraper = AmazonScraper()
     # shp_scraper = ShopeeScraper()
 
@@ -205,7 +285,8 @@ async def run_bot():
         'block_list': handle_list_block,
         'remove_hot': handle_remove_hot,
         'remove_block': handle_remove_block,
-        'handle_message': handle_direct_link
+        'handle_message': handle_direct_link,
+        'auto': handle_auto_toggle
     }
     asyncio.create_task(notifier.start_listening(telegram_handlers))
 
@@ -263,6 +344,67 @@ async def run_bot():
                     except Exception as e:
                         logger.error(f"Erro no scraper ML Hub: {e}", exc_info=True)
 
+                # Busca de Tendências (Cache de 6h gerenciado pelo scraper)
+                if cycle_count % 1 == 0: 
+                    try:
+                        trending_terms = await trends_scraper.get_cached_trends()
+                        logger.info(f"📊 {len(trending_terms)} tendências ativas carregadas.")
+                        
+                        # 2. Busca por Tendências no ML (NOVO)
+                        if trending_terms and TREND_SEARCH_ENABLED:
+                            try:
+                                logger.info(f"🔍 Buscando tendências no ML...")
+                                
+                                # Limit to top 5 trends to avoid overload
+                                top_trends = trending_terms[:MAX_TRENDS_PER_CYCLE]
+                                
+                                for trend in top_trends:
+                                    try:
+                                        logger.info(f"   Buscando: {trend.term}...")
+                                        deals = await ml_search_scraper.search_keyword(trend.term, max_results=MAX_RESULTS_PER_TREND)
+                                        all_deals.extend(deals)
+                                        logger.info(f"   ✅ {len(deals)} ofertas encontradas")
+                                        
+                                        # Rate limiting between searches (increased to avoid ban)
+                                        await asyncio.sleep(random.uniform(5, 10))
+                                    except Exception as e:
+                                        logger.error(f"   ❌ Erro ao buscar '{trend.term}': {e}")
+                                
+                                logger.info(f"📦 Total de ofertas acumuladas: {len(all_deals)}")
+                            except Exception as e:
+                                logger.error(f"Erro no bloco de busca por tendências: {e}")
+                                
+                    except Exception as e:
+                         logger.error(f"Erro ao carregar tendências: {e}")
+                         trending_terms = []
+                else:
+                    trending_terms = []
+
+                # 3. Busca por Termos Evergreen (NOVO)
+                if EVERGREEN_SEARCH_ENABLED:
+                    try:
+                        evergreen_terms = load_file_lines(EVERGREEN_TERMS_FILE)
+                        if evergreen_terms:
+                            logger.info(f"🌲 Buscando termos evergreen no ML...")
+                            
+                            # Limit to top 3 to avoid overload
+                            for term in evergreen_terms[:MAX_EVERGREEN_PER_CYCLE]:
+                                try:
+                                    logger.info(f"   Buscando: {term}...")
+                                    deals = await ml_search_scraper.search_keyword(term, max_results=MAX_RESULTS_PER_EVERGREEN)
+                                    all_deals.extend(deals)
+                                    logger.info(f"   ✅ {len(deals)} ofertas encontradas")
+                                    
+                                    # Rate limiting between searches (increased to avoid ban)
+                                    await asyncio.sleep(random.uniform(5, 10))
+                                except Exception as e:
+                                    logger.error(f"   ❌ Erro ao buscar '{term}': {e}")
+                            
+                            logger.info(f"📦 Total de ofertas acumuladas: {len(all_deals)}")
+                    except Exception as e:
+                        logger.error(f"Erro no bloco evergreen: {e}")
+
+
                 # Amazon (DISABLED)
                 # if cycle_count % AMZ_FREQUENCY == 0:
                 #     try:
@@ -288,14 +430,60 @@ async def run_bot():
             logger.error(f"Erro crítico no bloco de buscas automáticas: {e}", exc_info=True)
         if all_deals:
             unique_deals = {d.url: d for d in all_deals}.values()
+            
+            # Aplicar Scoring
             for deal in unique_deals:
-                if any(w in deal.title.lower() for w in blacklist): continue
+                deal.score = calculate_deal_score(deal, trending_terms if 'trending_terms' in locals() else [])
+            
+            # Ordenar por Score
+            sorted_deals = sorted(unique_deals, key=lambda d: d.score, reverse=True)
+            
+            # Apply category deduplication if enabled
+            if ENABLE_CATEGORY_DEDUPLICATION:
+                before_dedup = len(sorted_deals)
+                sorted_deals = deduplicate_by_category(sorted_deals, CATEGORY_LIMITS)
+                logger.info(f"🎯 Deduplicação por categoria: {before_dedup} → {len(sorted_deals)} ofertas")
+
+            logger.info(f"📊 Processando {len(sorted_deals)} ofertas únicas (ordenadas por score)...")
+
+            # HYBRID STRATEGY: Only generate affiliate links for deals with score >= 30
+            deals_to_process = []
+            for deal in sorted_deals:
+                if deal.score >= 30:
+                    deals_to_process.append(deal)
+                else:
+                    logger.info(f"⏭️ BAIXO SCORE: {deal.title[:30]}... (Score: {deal.score:.1f}) - Pulando")
+            
+            logger.info(f"🎯 {len(deals_to_process)} ofertas com score >= 30. Gerando links de afiliado...")
+
+            # Generate affiliate links only for high-score deals
+            for deal in deals_to_process:
+                if any(w in deal.title.lower() for w in blacklist): 
+                    logger.info(f"🚫 BLACKLIST: {deal.title[:30]}...")
+                    continue
 
                 if not db.is_deal_sent(deal.url, deal.price):
-                    # Alerta para o ADMIN (to_admin=True) - Agora com botões de Aprovar/Rejeitar
-                    await notifier.send_deal(deal, to_admin=True)
+                    
+                    # Generate affiliate link ONLY NOW (after scoring)
+                    if deal.store == "Mercado Livre":
+                        try:
+                            deal = await ml_hub_scraper.generate_affiliate_link_for_deal(deal)
+                        except Exception as e:
+                            logger.error(f"Erro ao gerar link de afiliado: {e}")
+                    
+                    # Lógica Autônoma vs Manual
+                    current_auto_mode = auto_mode.is_autonomous # Reload check in case changed during cycle
+                    
+                    if current_auto_mode and deal.score >= 60:
+                         logger.info(f"🤖 AUTO-POST: {deal.title[:30]}... (Score: {deal.score:.1f})")
+                         await notifier.send_deal(deal, to_admin=False) # Direct to channel
+                    
+                    elif deal.score >= 30:
+                         logger.info(f"👤 APPROVAL: {deal.title[:30]}... (Score: {deal.score:.1f})")
+                         await notifier.send_deal(deal, to_admin=True) # To admin
+                    
                     db.add_sent_deal(deal)
-                    await asyncio.sleep(5) # Rate limit para IA (evitar 429)
+                    await asyncio.sleep(5) # Rate limit for AI
 
         if cycle_count % REPORT_FREQUENCY == 0:
             await notifier.send_status_report({"cycles": cycle_count, "sent": total_sent, "blacklisted": total_blacklisted, "total_db": db.get_total_count()})

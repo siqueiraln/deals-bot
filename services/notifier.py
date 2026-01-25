@@ -60,20 +60,30 @@ class TelegramNotifier:
         message += f"{deal.title}\n\n"
         
         # Preços (De / Por)
-        if deal.original_price and deal.original_price > deal.price:
-            message += f"De <s>R$ {deal.original_price:.2f}</s> por R$ {deal.price:.2f}\n"
-        else:
-             message += f"R$ {deal.price:.2f}\n"
+        # Preços (De / Por) com formatação BRL
+        def format_currency(value):
+            return f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-        # Loja (Sem label)
-        message += f"{deal.store}\n\n"
+        price_formatted = format_currency(deal.price)
+        
+        if deal.original_price and deal.original_price > deal.price:
+            original_formatted = format_currency(deal.original_price)
+            discount = int(((deal.original_price - deal.price) / deal.original_price) * 100)
+            message += f"De <s>R$ {original_formatted}</s> por\n"
+            message += f"💰 <b>R$ {price_formatted}</b>  <i>({discount}% OFF)</i>\n\n"
+        else:
+             message += f"💰 <b>R$ {price_formatted}</b>\n\n"
+
+        # Loja e Link
+        message += f"📦 <b>{deal.store or 'Oferta Online'}</b>\n"
         
         # Link
         link_url = deal.affiliate_url or deal.url
-        message += f"{link_url}"
-
+        message += f"🔗 <a href='{link_url}'>VER OFERTA</a>"
+        
         if to_admin and deal.store == "Mercado Livre":
-            message += "\n\n🛠 <b>Ação sugerida:</b>\nCrie seu link em: <a href='https://www.mercadolivre.com.br/afiliados'>Painel ML</a>"
+             message += f"\n\nLink Original: {deal.url}"
+             message += "\n\n🛠 <b>Ação sugerida:</b>\nCrie seu link em: <a href='https://www.mercadolivre.com.br/afiliados'>Painel ML</a>"
 
         # Botões de Ação (Apenas para Admin)
         reply_markup = None

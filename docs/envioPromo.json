@@ -1,0 +1,416 @@
+{
+  "name": "Envio de Promos Mercado Livre",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        176,
+        160
+      ],
+      "id": "260398e1-ab45-449f-8714-d164c27697e6",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "amount": "={{ $('Setar dados').item.json['tempoEnvio // Minutos'] }}",
+        "unit": "minutes"
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1024,
+        160
+      ],
+      "id": "94cff73c-8f8d-42bc-b243-578368ea3d2c",
+      "name": "Wait",
+      "webhookId": "e254e9cf-a44f-46e2-b33e-d178ca7f1989"
+    },
+    {
+      "parameters": {
+        "operation": "sendPhoto",
+        "chatId": "ID DO CANAL",
+        "file": "={{ $('Loop Over Items').item.json.imagem }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🔗 EU QUERO!",
+                    "additionalFields": {
+                      "url": "={{ $json.link }}"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "caption": "=🏷️ <b>OLHA A PROMOOO</b>\n\n🔥 {{ $('Loop Over Items').item.json.titulo }}\n\n😎 {{ $('Loop Over Items').item.json['[\\'desconto(porcentagem)\\']'] }}\n\n<s>{{ $('Loop Over Items').item.json['[\\'preço(antes)\\']'] }}</s> ✅ <b>{{ $('Loop Over Items').item.json['[\\'preço(atual)\\']'] }}</b>",
+          "parse_mode": "HTML"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        816,
+        64
+      ],
+      "id": "2cad51a7-8931-40ff-a0c0-107aca9e3cfd",
+      "name": "Send a photo message",
+      "webhookId": "917f3719-1550-48a8-94f9-f519932bfbba",
+      "credentials": {
+        "telegramApi": {
+          "id": "3u1tdqF7B2j0JZ3I",
+          "name": "Goat das Promos"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "PÁGINA DE AFILIADOS ML\n\nhttps://www.mercadolivre.com.br/afiliados",
+        "height": 96,
+        "width": 576,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -480,
+        -96
+      ],
+      "typeVersion": 1,
+      "id": "b38911ca-b516-4791-84dc-a7cd71429cd4",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "PÁGINA DAS OFERTAS\n\nhttps://www.mercadolivre.com.br/ofertas",
+        "height": 96,
+        "width": 576,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -480,
+        -224
+      ],
+      "typeVersion": 1,
+      "id": "358c4636-c40f-4dea-934c-d771b4dae918",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            },
+            {
+              "triggerAtHour": 11,
+              "triggerAtMinute": 59
+            },
+            {
+              "triggerAtHour": 18
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -496,
+        160
+      ],
+      "id": "ac3bfcce-ee72-4775-959c-38adce0c808b",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "229fad5b-f2f6-4858-87c2-5d030037a806",
+              "name": "tempoEnvio // Minutos",
+              "value": 5,
+              "type": "number"
+            },
+            {
+              "id": "5b331bc2-b48a-48ec-9300-f4bf95a276c6",
+              "name": "pageNumber",
+              "value": 1,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -272,
+        160
+      ],
+      "id": "4e489393-ade1-4523-9eab-ecc03b8a212d",
+      "name": "Setar dados"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "Fz4i8R4DZItzRatS",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/Fz4i8R4DZItzRatS",
+          "cachedResultName": "Ofertas do Dia ML"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "page": "={{ $json.pageNumber }}"
+          },
+          "matchingColumns": [
+            "page"
+          ],
+          "schema": [
+            {
+              "id": "page",
+              "displayName": "page",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        -48,
+        160
+      ],
+      "id": "6689b674-b631-4df2-b39b-45eeee210c30",
+      "name": "Call 'Ofertas do Dia ML'"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "vVp36svUC2mIeJW4",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/vVp36svUC2mIeJW4",
+          "cachedResultName": "Gerar Link Mercado Livre"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "link": "={{ $json.link.split('?').first() }}"
+          },
+          "matchingColumns": [
+            "link"
+          ],
+          "schema": [
+            {
+              "id": "link",
+              "displayName": "link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        400,
+        80
+      ],
+      "id": "90a3e093-eabb-4be0-bc2e-c15b56b3b9bf",
+      "name": "Call 'Gerar link mercado livre'"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "0bb15cef-4593-4b62-90a5-14e75f60403c",
+              "leftValue": "={{ $json.link }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        608,
+        80
+      ],
+      "id": "607963a6-413c-4287-8b06-12c2f6c7382c",
+      "name": "Link válido"
+    },
+    {
+      "parameters": {
+        "content": "NAS AULAS ESSE NODE NÃO APARECE. ISSO FOI UMA ATUALIZAÇÃO QUE FIZ POIS AS VEZES O LINK DOS PRODUTOS VINHA DIFERENTE E O GERADOR DE LINKS NÃO CONSEGUIA GERAR E RETORNAVA O LINK VAZIO. ESSE NODE RESOLVE ISSO VERIFICANDO SE O LINK ESTÁ VAZIO OU NÃO, CASO ESTEJA ELE VAI PARA O PROX. PRODUTO.",
+        "height": 416,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        544,
+        -208
+      ],
+      "typeVersion": 1,
+      "id": "bf539ea4-513c-4e27-934b-3065b38eaa19",
+      "name": "Sticky Note2"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Call 'Gerar link mercado livre'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a photo message": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Setar dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Setar dados": {
+      "main": [
+        [
+          {
+            "node": "Call 'Ofertas do Dia ML'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Ofertas do Dia ML'": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Gerar link mercado livre'": {
+      "main": [
+        [
+          {
+            "node": "Link válido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Link válido": {
+      "main": [
+        [
+          {
+            "node": "Send a photo message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "28511192-c56d-43d1-9008-97c46c454d97",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "ac9512b600e9c78ff3a8fdaf58fc5f0623a9386c4de61bb442679fcf2329d57b"
+  },
+  "id": "Lr0awXVSSVY2viSO",
+  "tags": [
+    {
+      "updatedAt": "2026-01-13T21:14:42.587Z",
+      "createdAt": "2026-01-13T21:14:36.807Z",
+      "id": "30MJkUglPn3tnqAR",
+      "name": "Aulas Youtube"
+    }
+  ]
+}
