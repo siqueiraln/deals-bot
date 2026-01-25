@@ -9,15 +9,12 @@ from telegram import Update
 from telegram.ext import ContextTypes, Application
 from telegram.constants import ParseMode
 
-from scrapers.mercadolivre_hub import MercadoLivreHubScraper
-from scrapers.mercadolivre_trends import MercadoLivreTrendsScraper
 from scrapers.mercadolivre_search import MercadoLivreSearchScraper
 from scrapers.mercadolivre_api import MercadoLivreAPI 
 
 from services.notifier import TelegramNotifier
 from core.database import Database
 from config.logger import logger
-from core.scoring import calculate_deal_score
 from core.autonomous_mode import AutonomousMode
 from utils.category_dedup import deduplicate_by_category
 
@@ -25,71 +22,30 @@ load_dotenv()
 
 # --- Configurações Globais ---
 ADMIN_USER_ID = os.getenv("ADMIN_USER_ID")
-REPORT_FREQUENCY = 10   # Ciclos entre relatórios de status
-HOT_KEYWORDS_FILE = "data/hot_keywords.txt"
+REPORT_FREQUENCY = 24   # 1 relatório por dia (ciclos de 1h)
 MANUAL_LINKS_FILE = "data/manual_links.txt"
 BLACKLIST_FILE = "data/blacklist.txt"
-EVERGREEN_TERMS_FILE = "data/evergreen_terms.txt"
 
-# Filters
+# Filters (Simplificado: apenas evitar spam massivo de 1 coisa só)
 CATEGORY_LIMITS = {
-    "relogio": 2, "fone": 2, "tenis": 2, "notebook": 1,
-    "celular": 1, "tablet": 1, "monitor": 1, "outros": 3
+    "outros": 10 # Limite alto, deixamos o fluxo controlar
 }
 
-# --- Categorias de Volume (Estratégia do Usuário) ---
-VOLUME_CATEGORY_URLS = [
-    "https://lista.mercadolivre.com.br/beleza-cuidado-pessoal/_NoIndex_True?original_category_landing=true",
-    "https://lista.mercadolivre.com.br/arte-papelaria-armarinho/_NoIndex_True?original_category_landing=true",
-    "https://lista.mercadolivre.com.br/esportes-fitness/_NoIndex_True?original_category_landing=true",
-    "https://lista.mercadolivre.com.br/informatica/_NoIndex_True?original_category_landing=true",
-    "https://lista.mercadolivre.com.br/livros-revistas-comics/_NoIndex_True?original_category_landing=true",
-    "https://lista.mercadolivre.com.br/joias-relogios/_NoIndex_True?original_category_landing=true"
+# --- ESTRATÉGIA FINAL (OFERTAS HOURLY) ---
+# Alvo: 8 itens daqui
+PRIORITY_URLS = [
+    "https://www.mercadolivre.com.br/ofertas#nav-header",
+    "https://www.mercadolivre.com.br/ofertas?container_id=MLB779362-1&promotion_type=lightning#filter_applied=promotion_type&filter_position=2&is_recommended_domain=false&origin=scut"
 ]
 
-# --- Estratégias de Volume e Rotação ---
-
-def get_cycle_config(cycle_count: int) -> dict:
-    """
-    Retorna a configuração de volume baseada no ciclo atual.
-    Varia a quantidade de buscas para parecer mais humano/menos previsível.
-    """
-    configs = [
-        # Ciclo 1: Volume baixo (Início suave)
-        {"trends": 2, "evergreen": 1, "max_links": 8},
-        # Ciclo 2: Volume médio
-        {"trends": 3, "evergreen": 2, "max_links": 12},
-        # Ciclo 3: Volume alto (Pico)
-        {"trends": 4, "evergreen": 2, "max_links": 15},
-        # Ciclo 4: Volume baixo (Resfriamento)
-        {"trends": 2, "evergreen": 1, "max_links": 8},
-    ]
-    return configs[cycle_count % len(configs)]
-
-def get_rotated_evergreen_terms(cycle_count: int) -> list:
-    """
-    Rotaciona os termos evergreen para não buscar sempre as mesmas coisas.
-    Retorna 2 termos da lista global baseados no ciclo.
-    """
-    all_terms = [
-        "relógio inteligente", "tênis corrida", "fone bluetooth", "headset gamer",
-        "notebook i5", "celular samsung", "tablet samsung", "monitor gamer",
-        "mouse logitech", "teclado mecanico", "cadeira gamer",
-        "air fryer", "aspirador robô", "creatina", "whey protein"
-    ]
-    
-    # Se o arquivo existir, usa ele, senão usa o hardcoded
-    file_terms = load_file_lines(EVERGREEN_TERMS_FILE)
-    if file_terms:
-        all_terms = file_terms
-        
-    start_idx = (cycle_count * 2) % len(all_terms)
-    # Pega 2 termos, lidando com o fim da lista (wrap around)
-    selection = []
-    for i in range(2):
-        selection.append(all_terms[(start_idx + i) % len(all_terms)])
-        
-    return selection
+# Alvo: 2 itens daqui
+VOLUME_CATEGORY_URLS = [
+    "https://lista.mercadolivre.com.br/casa-moveis-decoracao/_NoIndex_True?original_category_landing=true", # Cozinha/Casa
+    "https://lista.mercadolivre.com.br/beleza-cuidado-pessoal/_NoIndex_True?original_category_landing=true",
+    "https://lista.mercadolivre.com.br/esportes-fitness/_NoIndex_True?original_category_landing=true",
+    "https://lista.mercadolivre.com.br/informatica/_NoIndex_True?original_category_landing=true",
+    "https://lista.mercadolivre.com.br/joias-relogios/_NoIndex_True?original_category_landing=true"
+]
 
 # --- Funções Utilitárias ---
 
@@ -113,7 +69,7 @@ def is_admin(update: Update):
 
 async def handle_scan(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update): return
-    await update.message.reply_text("🔎 <b>Forçando nova busca...</b>", parse_mode=ParseMode.HTML)
+    await update.message.reply_text("🔎 <b>Forçando nova busca AGORA...</b>", parse_mode=ParseMode.HTML)
     SCAN_EVENT.set()
 
 async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -121,14 +77,13 @@ async def handle_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db = Database()
     auto_mode = AutonomousMode().get_status()
     report = (
-        "🤖 <b>Bot Online (ML-Only)</b>\n\n"
+        "🤖 <b>Bot Online (Hourly Edition)</b>\n\n"
         f"📊 <b>Modo:</b> {auto_mode['mode']}\n"
+        f"⏱️ <b>Ciclo:</b> 1 Hora\n"
         f"📉 <b>Total Deals:</b> {db.get_total_count()}\n"
     )
     await update.message.reply_text(report, parse_mode=ParseMode.HTML)
 
-# (Outros handlers como handle_add_manual, handle_help mantidos simplificados ou omitidos se não mudaram lógica chave,
-# mas para reescrever o arquivo vou incluir os essenciais)
 async def handle_direct_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message: return
     text = update.message.text
@@ -146,7 +101,7 @@ async def handle_auto_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE)
 # --- Loop Principal Otimizado ---
 
 async def run_bot():
-    logger.info("🔥 Iniciando Deals Bot (ML-Only Edition)...")
+    logger.info("🔥 Iniciando Deals Bot (Hourly No-Score)...")
 
     # Inicialização
     notifier = TelegramNotifier()
@@ -154,7 +109,6 @@ async def run_bot():
     
     # Scrapers & API
     ml_search = MercadoLivreSearchScraper()
-    ml_trends = MercadoLivreTrendsScraper()
     ml_api = MercadoLivreAPI()
     
     auto_mode = AutonomousMode()
@@ -166,7 +120,7 @@ async def run_bot():
         'auto': handle_auto_toggle,
         'handle_message': handle_direct_link
     }
-    # Inicia listener em background (não bloqueante)
+    # Inicia listener em background
     asyncio.create_task(notifier.start_listening(telegram_handlers))
 
     cycle_count = 0
@@ -174,156 +128,113 @@ async def run_bot():
     while True:
         try:
             cycle_count += 1
-            config = get_cycle_config(cycle_count)
-            logger.info(f"--- Ciclo #{cycle_count} [Config: {config['max_links']} links] ---")
+            logger.info(f"--- Ciclo #{cycle_count} [Hora: {datetime.now().strftime('%H:%M')}] ---")
 
             # Listas de controle
             blacklist = [w.lower() for w in load_file_lines(BLACKLIST_FILE)]
-            hot_keywords = load_file_lines(HOT_KEYWORDS_FILE)
-            
-            # --- FASE 1: BUSCAS ANÔNIMAS ---
-            logger.info(f"--- Ciclo #{cycle_count} [Volume: {config['max_links']}] ---")
             
             scraped_deals = []
             
-            # --- FASE 1: BUSCA HÍBRIDA (TRENDS + CATEGORIAS) ---
+            # --- FASE 1: BUSCA NAS URLs PRIORITÁRIAS (Meta: 8 itens únicos) ---
             
-            # 1.1: Buscar Categories de Volume (Alternando)
-            # Pega 1 categoria por ciclo para não sobrecarregar
+            # Pega MUITOS (50) para filtrar duplicados e chegar nos 8 novos
+            logger.info("⚡ Buscando Ofertas Gerais (com scroll)...")
+            # Usamos a primeira URL principal (Ofertas)
+            deals_prio = await ml_search.scrape_category_url(PRIORITY_URLS[0], max_results=50)
+            scraped_deals.extend(deals_prio)
+            
+            # Se precisar, busca na Lightning também
+            if len(deals_prio) < 20:
+                 deals_light = await ml_search.scrape_category_url(PRIORITY_URLS[1], max_results=30)
+                 scraped_deals.extend(deals_light)
+
+            # Separa os candidatos ÚNICOS e NÃO-ENVIADOS da Prioridade
+            priority_candidates = []
+            for d in scraped_deals:
+                # Blacklist Check
+                if any(b in d.title.lower() for b in blacklist): continue
+                # DB Check (Essencial para não repetir)
+                if not db.is_deal_sent(d.url, d.price):
+                    priority_candidates.append(d)
+                    if len(priority_candidates) >= 8: # Meta atingida
+                        break
+            
+            logger.info(f"   ✅ Candidatos Ofertas: {len(priority_candidates)}")
+
+            # --- FASE 2: CATEGORIA SECUNDÁRIA (Meta: 2 itens únicos) ---
+            
             category_idx = cycle_count % len(VOLUME_CATEGORY_URLS)
             target_category_url = VOLUME_CATEGORY_URLS[category_idx]
+            logger.info(f"📂 Buscando Categoria: {target_category_url.split('/')[-2]}...")
             
-            logger.info(f"📂 Explorando Categoria: {target_category_url.split('/')[-2]}...")
-            cat_deals = await ml_search.scrape_category_url(target_category_url, max_results=10)
-            scraped_deals.extend(cat_deals)
-
-            # 1.2: Buscar Trends (Reduzido para complementar)
-            # Se a categoria trouxe pouco, compensa com trends
-            if len(scraped_deals) < 5:
-                trend_terms = await ml_trends.get_cached_trends()
-                # ... (existing trend logic logic adapted below)
-                for trend in trend_terms[:config['trends']]:
-                    logger.info(f"🔍 Trend Complementar: {trend.term}")
-                    deals = await ml_search.search_keyword(trend.term, max_results=5)
-                    scraped_deals.extend(deals)
+            cat_raw_deals = await ml_search.scrape_category_url(target_category_url, max_results=20)
             
-            # 1.3: Evergreen (Sempre bom ter 1 ou 2)
-            evergreen_terms = get_rotated_evergreen_terms(cycle_count)
-            for term in evergreen_terms[:config['evergreen']]:
-                logger.info(f"🌲 Evergreen: {term}")
-                deals = await ml_search.search_keyword(term, max_results=3)
-                scraped_deals.extend(deals)
+            category_candidates = []
+            for d in cat_raw_deals:
+                if any(b in d.title.lower() for b in blacklist): continue
+                # Evita duplicar se já pegou na priority (raro mas possível)
+                if any(p.url == d.url for p in priority_candidates): continue
+                
+                if not db.is_deal_sent(d.url, d.price):
+                    category_candidates.append(d)
+                    if len(category_candidates) >= 2: # Meta atingida
+                        break
+            
+            logger.info(f"   ✅ Candidatos Categoria: {len(category_candidates)}")
 
-            # 1.4 Links Manuais (Prioridade Máxima)
+            # --- FASE 3: CONSOLIDAÇÃO ---
+            
+            final_selection = priority_candidates + category_candidates
+            
+            # Links Manuais (Extra bonus)
             manual_links = load_file_lines(MANUAL_LINKS_FILE)
             if manual_links:
                 logger.info(f"🔗 Processando {len(manual_links)} links manuais...")
-                # Para links manuais, usamos o scraper de busca/detalhe direto se necessário
-                # Mas aqui, simplificando, vamos assumir que o usuário colou links válidos
-                # e processá-los na fase de API. Mas precisamos criar objetos Deal.
-                # (Implementação simplificada: buscar detalhes seria ideal, mas vamos focar no fluxo principal)
                 clear_manual_links()
-            
-            # --- FASE 2: SCORING & DEDUPLICAÇÃO ---
-            
-            logger.info(f"📦 Total bruto encontrado: {len(scraped_deals)}")
-            
-            unique_deals = []
-            seen_urls = set()
-            
-            # Carregar termos para scoring
-            # (precisamos dos trend_terms mesmo se não buscamos trends agora, para score)
-            if 'trend_terms' not in locals():
-                 trend_terms = await ml_trends.get_cached_trends()
+                # (Lógica manual simplificada - apenas limpa arquivo por enquanto)
 
-            for deal in scraped_deals:
-                if deal.url in seen_urls: continue
-                seen_urls.add(deal.url)
-                
-                # Calcular Score
-                deal.score = calculate_deal_score(deal, trend_terms)
-                unique_deals.append(deal)
-            
-            # Filtrar Score Mínimo (30) e Blacklist
-            approved_deals = []
-            
-            # Recarregar blacklist a cada ciclo
-            blacklist = [w.lower() for w in load_file_lines(BLACKLIST_FILE)]
-            
-            for deal in unique_deals:
-                if any(b in deal.title.lower() for b in blacklist):
-                    logger.info(f"🚫 BLACKLIST: {deal.title[:30]}")
-                    continue
-                if deal.score < 30:
-                    logger.info(f"⏭️ SKIP (Score {deal.score}): {deal.title[:30]}")
-                    continue
-                
-                # Check DB se já foi enviado recentemente
-                if not db.is_deal_sent(deal.url, deal.price):
-                    approved_deals.append(deal)
-            
-            # Deduplicar por Categoria (Limite)
-            final_selection = deduplicate_by_category(approved_deals, CATEGORY_LIMITS)
-            
-            # Ordenar por Score
-            final_selection.sort(key=lambda d: d.score, reverse=True)
-            
-            # Limitar quantidade pelo ciclo
-            final_selection = final_selection[:config['max_links']]
-            
-            logger.info(f"✅ Aprovados para API: {len(final_selection)}")
+            logger.info(f"🚀 Total para Envio: {len(final_selection)}")
 
-            # --- FASE 3: API OFICIAL (LINKS) ---
+            # --- FASE 4: API & PUBLICAÇÃO (Sem Score) ---
             
             if final_selection:
                 urls = [d.url for d in final_selection]
                 affiliate_links = await ml_api.create_links(urls)
                 
-                # Atualizar URLs nos deals
-                for deal, aff_link in zip(final_selection, affiliate_links):
-                    if aff_link:
-                        deal.url = aff_link
+                for i, deal in enumerate(final_selection):
+                    # Atualizar Link
+                    if i < len(affiliate_links) and affiliate_links[i]:
+                        deal.url = affiliate_links[i]
+                    
+                    # Postar (Modo Autônomo Default)
+                    mode = auto_mode.is_autonomous
+                    
+                    if mode:
+                        logger.info(f"📤 Posting: {deal.title[:40]}")
+                        await notifier.send_deal(deal, to_admin=False)
+                        db.add_sent_deal(deal)
+                    else:
+                        await notifier.send_deal(deal, to_admin=True)
+                        db.add_sent_deal(deal)
+                    
+                    await asyncio.sleep(10) # Delay para não flooding Telegram
 
-            # --- FASE 4: PUBLICAÇÃO ---
+            # --- FASE 5: DORMIR 1 HORA ---
             
-            posted_count = 0
-            for deal in final_selection:
-                mode = auto_mode.is_autonomous
-                
-                # Verifica se o link foi encurtado com sucesso (API OK)
-                # Links curtos do ML geralmente são "mercadolivre.com/sec/" ou "k.ml/" ou similar
-                is_short_link = "mercadolivre.com/sec/" in deal.url or "k.ml/" in deal.url
-                
-                if mode and deal.score >= 30 and is_short_link:
-                    logger.info(f"🚀 AUTO-POST: {deal.title[:30]}")
-                    logger.info(f"🔗 LINK: {deal.url}")
-                    await notifier.send_deal(deal, to_admin=False)
-                    db.add_sent_deal(deal)
-                    posted_count += 1
-                elif deal.score >= 30: 
-                    # Fallback ou Manual -> Review
-                    reason = "Modo Manual" if not mode else "Link Fallback (Não Encurtado)"
-                    logger.info(f"👤 REVIEW ({reason}): {deal.title[:30]}")
-                    await notifier.send_deal(deal, to_admin=True)
-                    db.add_sent_deal(deal)
-                    posted_count += 1
-                
-                await asyncio.sleep(3) # Delay entre mensagens
-
             # Relatório Periódico
             if cycle_count % REPORT_FREQUENCY == 0:
-                await notifier.send_status_report({
-                    "cycles": cycle_count,
-                    "db_size": db.get_total_count()
-                })
+                await notifier.send_status_report({"cycles": cycle_count, "db_size": db.get_total_count()})
 
-            # Waiter
-            logger.info("💤 Dormindo... (Aguardando próximo ciclo)")
+            wait_time = 3600 # 1 Hora
+            logger.info(f"💤 Dormindo por {wait_time/60} minutos... (Próximo ciclo: {(datetime.now().timestamp() + wait_time)})")
+            
             try:
-                await asyncio.wait_for(SCAN_EVENT.wait(), timeout=1200) # 20 min
+                # Permite interromper o sono com comando /scan
+                await asyncio.wait_for(SCAN_EVENT.wait(), timeout=wait_time)
+                SCAN_EVENT.clear()
+                logger.info("⏩ Sono interrompido por comando manual!")
             except asyncio.TimeoutError:
-                pass
-            SCAN_EVENT.clear()
+                pass # Acordou naturalmente
 
         except Exception as e:
             logger.error(f"❌ Erro no loop: {e}", exc_info=True)

@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from models.deal import Deal
 from telegram.request import HTTPXRequest
 from services.copywriter import Copywriter
+from scrapers.mercadolivre_api import MercadoLivreAPI
 
 load_dotenv()
 
@@ -122,7 +123,6 @@ class TelegramNotifier:
                     )
             except Exception as e:
                 print(f"Erro envio canal: {e}")
-    # ...
 
     async def _handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Processa os cliques nos botões de Aprovar/Rejeitar"""
@@ -178,6 +178,19 @@ class TelegramNotifier:
                 # Criar Deal Temporário
                 temp_deal = Deal(title=title, price=price, url=url, store="Mercado Livre")
                 temp_deal.original_price = original_price
+                
+                print(f"🔄 Processando Aprovação: {temp_deal.title}")
+                print(f"🔗 URL Original: {temp_deal.url}")
+
+                # --- SIMPLIFICAÇÃO MVP: Confiar no link já encurtado ---
+                # O main.py já encurtou antes de mandar para aprovação.
+                # Não precisamos chamar a API de novo (que estava causando erro).
+                
+                if temp_deal.url:
+                    print(f"✅ Aprovação processada: {temp_deal.url}")
+                else:
+                    print("⚠️ URL não encontrada na mensagem original.")
+                # ---------------------------------------------
                 
                 # Gerar Copy IA
                 await message.edit_caption(caption="⏳ Gerando Copy com IA...")

@@ -11,5 +11,6 @@ class Deal(BaseModel):
     affiliate_url: Optional[str] = None
     store: str
     image_url: Optional[str] = None
-    timestamp: datetime = datetime.now()
+    timestamp: datetime = datetime.now() # Reminder: This sets time at module load, acceptable for now or fix if critical
     score: float = 0.0
+    strategy: Optional[str] = None

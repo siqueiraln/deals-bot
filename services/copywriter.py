@@ -14,7 +14,7 @@ class Copywriter:
             return
 
         self.client = genai.Client(api_key=self.api_key)
-        self.model_name = 'gemini-2.0-flash' # Atualizado para modelo mais recente e estável
+        self.model_name = 'gemini-3-flash-preview' # Modelo disponível e solicitado pelo usuário (Bleeding Edge)
 
     async def generate_caption(self, deal: Deal) -> str:
         """Gera uma legenda persuasiva para a oferta usando IA."""
