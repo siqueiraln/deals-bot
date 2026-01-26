@@ -12,7 +12,8 @@ class Database:
             cursor = conn.cursor()
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS sent_deals (
-                    url TEXT PRIMARY KEY,
+                    product_id TEXT PRIMARY KEY,
+                    url TEXT,
                     title TEXT,
                     price REAL,
                     store TEXT,
@@ -21,35 +22,53 @@ class Database:
             """)
             conn.commit()
 
-    def get_last_price(self, url: str) -> float:
+    def get_last_price(self, product_id: str) -> float:
+        """Retorna o último preço registrado para um produto."""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT price FROM sent_deals WHERE url = ?", (url,))
+            cursor.execute("SELECT price FROM sent_deals WHERE product_id = ?", (product_id,))
             result = cursor.fetchone()
             return result[0] if result else None
 
-    def is_deal_sent(self, url: str, current_price: float = None) -> bool:
+    def is_deal_sent(self, product_id: str, current_price: float = None) -> dict:
         """
-        Checks if deal was sent.
-        STRICT MODE: If URL exists, returns True regardless of price change.
+        Verifica se o deal foi enviado e retorna informações sobre preço.
+        
+        Returns:
+            dict: {
+                'sent': bool,           # Se já foi enviado
+                'last_price': float,    # Último preço registrado (ou None)
+                'price_dropped': bool   # Se o preço atual é menor que o anterior
+            }
         """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT price FROM sent_deals WHERE url = ?", (url,))
+            cursor.execute("SELECT price FROM sent_deals WHERE product_id = ?", (product_id,))
             result = cursor.fetchone()
 
             if result is None:
-                return False
+                return {
+                    'sent': False,
+                    'last_price': None,
+                    'price_dropped': False
+                }
 
-            # If found, return True immediately (Ignore price changes to avoid repetition)
-            return True
+            last_price = result[0]
+            price_dropped = current_price < last_price if current_price else False
+
+            return {
+                'sent': True,
+                'last_price': last_price,
+                'price_dropped': price_dropped
+            }
 
     def add_sent_deal(self, deal: Deal):
+        """Adiciona ou atualiza um deal no banco."""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT OR REPLACE INTO sent_deals (url, title, price, store, timestamp) VALUES (?, ?, ?, ?, ?)",
-                (deal.url, deal.title, deal.price, deal.store, datetime.now())
+                "INSERT OR REPLACE INTO sent_deals (product_id, url, title, price, store, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
+                (deal.product_id, deal.url, deal.title, deal.price, deal.store, datetime.now())
             )
             conn.commit()
 

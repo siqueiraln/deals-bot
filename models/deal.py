@@ -8,6 +8,7 @@ class Deal(BaseModel):
     original_price: Optional[float] = None
     discount_percentage: Optional[int] = None
     url: str
+    product_id: Optional[str] = None  # ID único do ML (ex: MLB-3456789012)
     affiliate_url: Optional[str] = None
     store: str
     image_url: Optional[str] = None

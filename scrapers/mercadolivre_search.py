@@ -227,6 +227,18 @@ class MercadoLivreSearchScraper:
             
         url = await link_el.get_attribute('href')
         
+        # EXTRACT PRODUCT ID (MLB-XXXXXXX)
+        import re
+        product_id = None
+        if url:
+            match = re.search(r'(MLB-?\d+)', url)
+            if match:
+                product_id = match.group(1)
+        
+        if not product_id:
+            logger.warning(f"   ⚠️ Item skipped ({title[:15]}...): No ML Product ID found in URL")
+            return None
+        
         # CLEAN URL (Critical for DB Dedup)
         # Remove tracking params like ?tracking_id=...
         if url and "?" in url:
@@ -253,9 +265,11 @@ class MercadoLivreSearchScraper:
             title=title,
             price=price,
             url=url,
+            product_id=product_id,
             store="Mercado Livre",
             image_url=image_url
         )
         deal.discount_percentage = 0 
         
         return deal
+

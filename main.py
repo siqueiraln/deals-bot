@@ -1,6 +1,7 @@
 import asyncio
 import os
 import random
+import json
 import logging
 from datetime import datetime
 from dotenv import load_dotenv
@@ -25,6 +26,7 @@ ADMIN_USER_ID = os.getenv("ADMIN_USER_ID")
 REPORT_FREQUENCY = 24   # 1 relatório por dia (ciclos de 1h)
 MANUAL_LINKS_FILE = "data/manual_links.txt"
 BLACKLIST_FILE = "data/blacklist.txt"
+STATE_FILE = "data/bot_state.json"
 
 # Filters (Simplificado: apenas evitar spam massivo de 1 coisa só)
 CATEGORY_LIMITS = {
@@ -60,6 +62,22 @@ def load_file_lines(filepath):
 def clear_manual_links():
     with open(MANUAL_LINKS_FILE, "w", encoding="utf-8") as f:
         f.write("# Adicione links aqui (serão limpos após o processamento)\n")
+
+def load_state():
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"⚠️ Erro ao ler estado: {e}")
+    return {}
+
+def save_state(data):
+    try:
+        with open(STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+    except Exception as e:
+        logger.error(f"⚠️ Erro ao salvar estado: {e}")
 
 SCAN_EVENT = asyncio.Event()
 
@@ -100,6 +118,32 @@ async def handle_auto_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE)
     mode = "AUTÔNOMO" if new_state else "MANUAL"
     await update.message.reply_text(f"🤖 <b>Modo {mode} Ativado</b>", parse_mode=ParseMode.HTML)
 
+async def handle_daily_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update): return
+    
+    # Extrair link do comando: /daily <url>
+    try:
+        args = context.args
+        if not args:
+            await update.message.reply_text("⚠️ Uso: /daily <link>")
+            return
+        
+        url = args[0]
+        if not url.startswith("http"):
+            await update.message.reply_text("⚠️ O link deve começar com http.")
+            return
+
+        state = load_state()
+        state["daily_link"] = url
+        state["daily_link_date"] = datetime.now().strftime('%Y-%m-%d')
+        save_state(state)
+
+        await update.message.reply_text(f"🌟 <b>Daily Deal Definido!</b>\n\nLink: {url}\nValidade: Hoje ({state['daily_link_date']})", parse_mode=ParseMode.HTML)
+        
+    except Exception as e:
+        logger.error(f"Erro no /daily: {e}")
+        await update.message.reply_text("❌ Erro ao salvar daily link.")
+
 # --- Loop Principal Otimizado ---
 
 async def run_bot():
@@ -120,7 +164,8 @@ async def run_bot():
         'scan': handle_scan,
         'status': handle_status,
         'auto': handle_auto_toggle,
-        'handle_message': handle_direct_link
+        'handle_message': handle_direct_link,
+        'daily': handle_daily_link
     }
     # Inicia listener em background
     asyncio.create_task(notifier.start_listening(telegram_handlers))
@@ -155,13 +200,40 @@ async def run_bot():
                 else:
                     general_urls.append(clean_url)
 
+            # --- SETUP DAILY LINK (Prioridade Máxima) ---
+            state_daily = load_state() # Recarrega estado para pegar updates recentes
+            daily_link = state_daily.get("daily_link")
+            daily_date = state_daily.get("daily_link_date")
+            today_str = datetime.now().strftime('%Y-%m-%d')
+
+            if daily_link and daily_date == today_str:
+                logger.info(f"🌟 DAILY DEAL ATIVO: Usando link do dia! ({daily_link})")
+                fixed_brand_url = daily_link # Sobrescreve a marca fixa (Crocs)
+            elif daily_link:
+                # Se existe mas datas não batem, expirou.
+                logger.info("📅 Daily Deal expirado ou data inválida. Voltando ao normal.")
+            
             if not general_urls:
                  logger.warning("⚠️ Nenhum link GERAL encontrado!")
                  await asyncio.sleep(60)
                  continue
 
             # 2. Estratégia Híbrida (7 + 1)
-            target_general = random.choice(general_urls)
+            # Evitar repetição da última categoria
+            state = load_state()
+            last_url = state.get("last_general_url")
+            
+            available_urls = general_urls.copy()
+            if last_url and last_url in available_urls and len(available_urls) > 1:
+                available_urls.remove(last_url)
+                logger.info(f"🚫 Evitando repetição da categoria anterior: {last_url}")
+
+            target_general = random.choice(available_urls)
+            
+            # Salvar novo estado
+            state["last_general_url"] = target_general
+            save_state(state)
+
             logger.info(f"🎲 Link Geral Sorteado: {target_general}")
             
             if fixed_brand_url:
@@ -177,14 +249,29 @@ async def run_bot():
             random.shuffle(raw_general)
             
             count_general = 0
+            price_drop_deals = []  # Produtos com redução de preço
+            
             for d in raw_general:
                 # Blacklist Check
                 if any(b in d.title.lower() for b in blacklist): continue
-                # DB Check
-                if not db.is_deal_sent(d.url, d.price):
+                
+                # Verificar se produto tem ID válido
+                if not d.product_id:
+                    logger.warning(f"⚠️ Deal sem product_id: {d.title[:30]}")
+                    continue
+                
+                # DB Check com comparação de preço
+                deal_status = db.is_deal_sent(d.product_id, d.price)
+                
+                if not deal_status['sent']:
+                    # Produto novo - adiciona normalmente
                     scraped_deals.append(d)
                     count_general += 1
-                    if count_general >= 7: break # Top 7 Gerais
+                    if count_general >= 7: break
+                elif deal_status['price_dropped']:
+                    # Produto já enviado mas com preço menor - separa para aprovação
+                    logger.info(f"💰 Redução de preço detectada: {d.title[:40]} - R$ {deal_status['last_price']:.2f} → R$ {d.price:.2f}")
+                    price_drop_deals.append(d)
             
             # --- FASE 2: BUSCA MARCA FIXA (1 Item) ---
             if fixed_brand_url:
@@ -196,13 +283,23 @@ async def run_bot():
                 for d in raw_brand:
                     # Blacklist Check
                     if any(b in d.title.lower() for b in blacklist): continue
-                    # DB Check
-                    if not db.is_deal_sent(d.url, d.price):
-                        # Tag especial (opcional)
-                        # d.title = f"🐊 {d.title}" 
+                    
+                    # Verificar se produto tem ID válido
+                    if not d.product_id:
+                        continue
+                    
+                    # DB Check com comparação de preço
+                    deal_status = db.is_deal_sent(d.product_id, d.price)
+                    
+                    if not deal_status['sent']:
                         scraped_deals.append(d)
                         found_brand = True
-                        break # Só 1 item
+                        break
+                    elif deal_status['price_dropped']:
+                        logger.info(f"💰 Redução de preço (Marca Fixa): {d.title[:40]} - R$ {deal_status['last_price']:.2f} → R$ {d.price:.2f}")
+                        price_drop_deals.append(d)
+                        found_brand = True
+                        break
                 
                 if not found_brand:
                     logger.warning("⚠️ Nenhum item novo da Marca Fixa encontrado neste ciclo.")
@@ -217,6 +314,8 @@ async def run_bot():
                 # (Lógica manual simplificada - apenas limpa arquivo por enquanto)
 
             logger.info(f"🚀 Total para Envio: {len(final_selection)}")
+            if price_drop_deals:
+                logger.info(f"💰 Total com Redução de Preço (para aprovação): {len(price_drop_deals)}")
 
             # --- FASE 4: API & PUBLICAÇÃO (Sem Score) ---
             
@@ -243,7 +342,28 @@ async def run_bot():
                     
                     await asyncio.sleep(10) # Delay para não flooding Telegram
 
-            # --- FASE 5: DORMIR 1 HORA ---
+            # --- FASE 5: PROCESSAR REDUÇÕES DE PREÇO (Enviar para Admin) ---
+            
+            if price_drop_deals:
+                logger.info(f"💰 Processando {len(price_drop_deals)} deals com redução de preço...")
+                
+                # Criar links de afiliado para os price drops
+                price_drop_urls = [d.url for d in price_drop_deals]
+                price_drop_affiliate_links = await ml_api.create_links(price_drop_urls)
+                
+                for i, deal in enumerate(price_drop_deals):
+                    # Atualizar Link de Afiliado
+                    if i < len(price_drop_affiliate_links) and price_drop_affiliate_links[i]:
+                        deal.affiliate_url = price_drop_affiliate_links[i]
+                    
+                    # SEMPRE enviar para admin (aprovação necessária)
+                    logger.info(f"💰 Enviando para aprovação: {deal.title[:40]} - R$ {deal.price:.2f}")
+                    await notifier.send_deal(deal, to_admin=True)
+                    # NÃO adiciona ao DB ainda - só após aprovação do admin
+                    
+                    await asyncio.sleep(10)
+            # --- FASE 6: DORMIR 1 HORA ---
+
             
             # Relatório Periódico
             if cycle_count % REPORT_FREQUENCY == 0:
