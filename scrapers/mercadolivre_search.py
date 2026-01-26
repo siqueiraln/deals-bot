@@ -129,10 +129,13 @@ class MercadoLivreSearchScraper:
                     logger.warning("   ⚠️ Timeout waiting for items selector (might be empty or slow).")
 
                 # Scroll Logic to Load More Items (Infinite Scroll)
-                logger.info("   📜 Scrolling to load more items...")
-                for _ in range(5): # Scroll 5 times
+                scroll_cycles = max(5, int(max_results / 10)) # E.g., 100 items -> 10 scrolls
+                if scroll_cycles > 25: scroll_cycles = 25 # Safety cap
+                
+                logger.info(f"   📜 Scrolling {scroll_cycles} times to find {max_results} items...")
+                for _ in range(scroll_cycles): 
                     await page.keyboard.press("PageDown")
-                    await asyncio.sleep(1.5) # Wait for load
+                    await asyncio.sleep(1.2) # Wait for load
                 
                 # Check different result container types (same as search)
                 cards = []
@@ -223,6 +226,11 @@ class MercadoLivreSearchScraper:
             return None
             
         url = await link_el.get_attribute('href')
+        
+        # CLEAN URL (Critical for DB Dedup)
+        # Remove tracking params like ?tracking_id=...
+        if url and "?" in url:
+            url = url.split("?")[0]
         
         # 3. Price
         price_el = await card.query_selector(".poly-price__current .andes-money-amount__fraction")

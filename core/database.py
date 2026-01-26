@@ -31,8 +31,7 @@ class Database:
     def is_deal_sent(self, url: str, current_price: float = None) -> bool:
         """
         Checks if deal was sent.
-        If current_price is provided, returns True only if the price is the same.
-        Returns False if the price changed (indicating a new opportunity).
+        STRICT MODE: If URL exists, returns True regardless of price change.
         """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
@@ -42,11 +41,7 @@ class Database:
             if result is None:
                 return False
 
-            if current_price is not None:
-                last_price = result[0]
-                # If price is the same, we don't want to send it again
-                return abs(last_price - current_price) < 0.01
-
+            # If found, return True immediately (Ignore price changes to avoid repetition)
             return True
 
     def add_sent_deal(self, deal: Deal):

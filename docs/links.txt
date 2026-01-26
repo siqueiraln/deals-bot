@@ -1,0 +1,7 @@
+https://www.mercadolivre.com.br/ofertas#filter_applied=category&filter_position=0&origin=qcat
+https://www.mercadolivre.com.br/ofertas?category=MLB1246#filter_applied=category&filter_position=3&origin=qcat - Beleza e cuidado pessoal
+https://www.mercadolivre.com.br/ofertas?category=MLB1430#filter_applied=category&filter_position=3&origin=qcat - Calçados, Roupas e Bolsas
+https://www.mercadolivre.com.br/ofertas?category=MLB1574#filter_applied=category&filter_position=3&origin=qcat - Casa, Móveis e Decoração
+https://www.mercadolivre.com.br/ofertas?category=MLB1276#filter_applied=category&filter_position=3&origin=qcat - Esportes e Fitness
+https://www.mercadolivre.com.br/ofertas?category=MLB1000#filter_applied=category&filter_position=3&origin=qcat - Eletrônicos, Áudio e Vídeo
+https://www.mercadolivre.com.br/ofertas?container_id=MLB1433521-2&deal_ids=MLB1433521#filter_applied=container_id&filter_position=6&is_recommended_domain=false&origin=scut - Crocs

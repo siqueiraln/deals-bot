@@ -31,20 +31,22 @@ CATEGORY_LIMITS = {
     "outros": 10 # Limite alto, deixamos o fluxo controlar
 }
 
-# --- ESTRATÉGIA FINAL (OFERTAS HOURLY) ---
-# Alvo: 8 itens daqui
+# --- CONFIGURAÇÃO SIMPLIFICADA (OFERTAS) ---
+# O Bot vai olhar esta lista e cavar até achar 8 itens novos
 PRIORITY_URLS = [
     "https://www.mercadolivre.com.br/ofertas#nav-header",
-    "https://www.mercadolivre.com.br/ofertas?container_id=MLB779362-1&promotion_type=lightning#filter_applied=promotion_type&filter_position=2&is_recommended_domain=false&origin=scut"
+    # Backup caso a principal falhe
+    "https://www.mercadolivre.com.br/ofertas?promotion_type=lightning"
 ]
 
-# Alvo: 2 itens daqui
+# Categorias (Volume)
 VOLUME_CATEGORY_URLS = [
-    "https://lista.mercadolivre.com.br/casa-moveis-decoracao/_NoIndex_True?original_category_landing=true", # Cozinha/Casa
+    "https://lista.mercadolivre.com.br/casa-moveis-decoracao/_NoIndex_True?original_category_landing=true", 
     "https://lista.mercadolivre.com.br/beleza-cuidado-pessoal/_NoIndex_True?original_category_landing=true",
     "https://lista.mercadolivre.com.br/esportes-fitness/_NoIndex_True?original_category_landing=true",
     "https://lista.mercadolivre.com.br/informatica/_NoIndex_True?original_category_landing=true",
-    "https://lista.mercadolivre.com.br/joias-relogios/_NoIndex_True?original_category_landing=true"
+    "https://lista.mercadolivre.com.br/joias-relogios/_NoIndex_True?original_category_landing=true",
+    "https://lista.mercadolivre.com.br/eletronicos-audio-video/_NoIndex_True?original_category_landing=true"
 ]
 
 # --- Funções Utilitárias ---
@@ -125,66 +127,87 @@ async def run_bot():
 
     cycle_count = 0
 
+# --- SETUP DE FONTES (Lê do arquivo solicitado) ---
+    LINKS_FILE = "docs/links.txt"
+    if not os.path.exists(LINKS_FILE):
+        logger.error(f"❌ Arquivo {LINKS_FILE} não encontrado! Crie o arquivo com os links.")
+        return
+
+    # Loop Principal
     while True:
         try:
             cycle_count += 1
             logger.info(f"--- Ciclo #{cycle_count} [Hora: {datetime.now().strftime('%H:%M')}] ---")
 
-            # Listas de controle
-            blacklist = [w.lower() for w in load_file_lines(BLACKLIST_FILE)]
+            # 1. Carrega Links Frescos e Separa "Geral" vs "Marca Fixa"
+            raw_lines = load_file_lines(LINKS_FILE)
+            general_urls = []
+            fixed_brand_url = None
             
+            for line in raw_lines:
+                # Limpa a linha (remove comentários tipo "- Crocs")
+                clean_url = line.split(" ")[0].strip()
+                if not clean_url.startswith("http"): continue
+                
+                # Identifica Marca Fixa (Crocs)
+                if "crocs" in line.lower() or "MLB1433521" in clean_url:
+                    fixed_brand_url = clean_url
+                else:
+                    general_urls.append(clean_url)
+
+            if not general_urls:
+                 logger.warning("⚠️ Nenhum link GERAL encontrado!")
+                 await asyncio.sleep(60)
+                 continue
+
+            # 2. Estratégia Híbrida (7 + 1)
+            target_general = random.choice(general_urls)
+            logger.info(f"🎲 Link Geral Sorteado: {target_general}")
+            
+            if fixed_brand_url:
+                logger.info(f"🐊 Link Marca Fixa: {fixed_brand_url}")
+            
+            # Carrega Blacklist
+            blacklist = [w.lower() for w in load_file_lines(BLACKLIST_FILE)]
             scraped_deals = []
             
-            # --- FASE 1: BUSCA NAS URLs PRIORITÁRIAS (Meta: 8 itens únicos) ---
+            # --- FASE 1: BUSCA GERAL (7 Itens) ---
+            # Busca 100 itens para garantir variedade
+            raw_general = await ml_search.scrape_category_url(target_general, max_results=100)
+            random.shuffle(raw_general)
             
-            # Pega MUITOS (50) para filtrar duplicados e chegar nos 8 novos
-            logger.info("⚡ Buscando Ofertas Gerais (com scroll)...")
-            # Usamos a primeira URL principal (Ofertas)
-            deals_prio = await ml_search.scrape_category_url(PRIORITY_URLS[0], max_results=50)
-            scraped_deals.extend(deals_prio)
-            
-            # Se precisar, busca na Lightning também
-            if len(deals_prio) < 20:
-                 deals_light = await ml_search.scrape_category_url(PRIORITY_URLS[1], max_results=30)
-                 scraped_deals.extend(deals_light)
-
-            # Separa os candidatos ÚNICOS e NÃO-ENVIADOS da Prioridade
-            priority_candidates = []
-            for d in scraped_deals:
+            count_general = 0
+            for d in raw_general:
                 # Blacklist Check
                 if any(b in d.title.lower() for b in blacklist): continue
-                # DB Check (Essencial para não repetir)
+                # DB Check
                 if not db.is_deal_sent(d.url, d.price):
-                    priority_candidates.append(d)
-                    if len(priority_candidates) >= 8: # Meta atingida
-                        break
+                    scraped_deals.append(d)
+                    count_general += 1
+                    if count_general >= 7: break # Top 7 Gerais
             
-            logger.info(f"   ✅ Candidatos Ofertas: {len(priority_candidates)}")
-
-            # --- FASE 2: CATEGORIA SECUNDÁRIA (Meta: 2 itens únicos) ---
-            
-            category_idx = cycle_count % len(VOLUME_CATEGORY_URLS)
-            target_category_url = VOLUME_CATEGORY_URLS[category_idx]
-            logger.info(f"📂 Buscando Categoria: {target_category_url.split('/')[-2]}...")
-            
-            cat_raw_deals = await ml_search.scrape_category_url(target_category_url, max_results=20)
-            
-            category_candidates = []
-            for d in cat_raw_deals:
-                if any(b in d.title.lower() for b in blacklist): continue
-                # Evita duplicar se já pegou na priority (raro mas possível)
-                if any(p.url == d.url for p in priority_candidates): continue
+            # --- FASE 2: BUSCA MARCA FIXA (1 Item) ---
+            if fixed_brand_url:
+                # Busca deep também, mas precisamos de apenas 1
+                raw_brand = await ml_search.scrape_category_url(fixed_brand_url, max_results=50)
+                random.shuffle(raw_brand)
                 
-                if not db.is_deal_sent(d.url, d.price):
-                    category_candidates.append(d)
-                    if len(category_candidates) >= 2: # Meta atingida
-                        break
+                found_brand = False
+                for d in raw_brand:
+                    # Blacklist Check
+                    if any(b in d.title.lower() for b in blacklist): continue
+                    # DB Check
+                    if not db.is_deal_sent(d.url, d.price):
+                        # Tag especial (opcional)
+                        # d.title = f"🐊 {d.title}" 
+                        scraped_deals.append(d)
+                        found_brand = True
+                        break # Só 1 item
+                
+                if not found_brand:
+                    logger.warning("⚠️ Nenhum item novo da Marca Fixa encontrado neste ciclo.")
             
-            logger.info(f"   ✅ Candidatos Categoria: {len(category_candidates)}")
-
-            # --- FASE 3: CONSOLIDAÇÃO ---
-            
-            final_selection = priority_candidates + category_candidates
+            final_selection = scraped_deals
             
             # Links Manuais (Extra bonus)
             manual_links = load_file_lines(MANUAL_LINKS_FILE)
@@ -204,7 +227,8 @@ async def run_bot():
                 for i, deal in enumerate(final_selection):
                     # Atualizar Link
                     if i < len(affiliate_links) and affiliate_links[i]:
-                        deal.url = affiliate_links[i]
+                        deal.affiliate_url = affiliate_links[i] # Guarda no campo correto
+                        # NÃO subscreve deal.url, para garantir o check do DB no futuro!
                     
                     # Postar (Modo Autônomo Default)
                     mode = auto_mode.is_autonomous

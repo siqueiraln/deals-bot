@@ -86,30 +86,46 @@ class TelegramNotifier:
                 print(f"Erro envio admin: {e}")
 
         else:
-            # --- FORMATO DO CANAL (Com Copy IA, Layout Final) ---
-            # Gera legenda com IA AGORA (Só na hora de postar)
-            ai_text = await self.copywriter.generate_caption(deal)
+            # --- FORMATO "PROMO OUT OF CONTEXT" (Final) ---
             
-            # Formatação Final
-            message = f"🔥 <b>{ai_text.upper()}</b>\n\n"
-            message += f"{deal.title}\n\n"
+            # 1. Gera Hook com IA (Já configurada para estilo curto)
+            ai_hook = await self.copywriter.generate_caption(deal)
             
-            # Preços
+            # 2. Formatação de Preço
             def format_currency(value):
                 return f"{value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
             price_formatted = format_currency(deal.price)
+            
+            # 3. Montagem da Mensagem
+            # Linha 1: Cabeçalho Fixo
+            message = "> Love Ofertas 💘:\n"
+            
+            # Linha 2: Hook (Ex: 🖼 PRA ELA 🙋‍♀️)
+            message += f"<b>{ai_hook}</b>\n\n"
+            
+            # Linha 3: Título do Produto
+            message += f"{deal.title}\n\n"
+            
+            # Linha 4: Preço (De/Por ou Cheio)
             if deal.original_price and deal.original_price > deal.price:
                 original_formatted = format_currency(deal.original_price)
-                discount = int(((deal.original_price - deal.price) / deal.original_price) * 100)
-                message += f"De <s>R$ {original_formatted}</s> por\n"
-                message += f"💰 <b>R$ {price_formatted}</b>  <i>({discount}% OFF)</i>\n\n"
+                message += f"De R$ {original_formatted} por R$ {price_formatted} 💵\n"
             else:
-                 message += f"💰 <b>R$ {price_formatted}</b>\n\n"
+                message += f"Por R$ {price_formatted} 💵\n"
+            
+            # (Cupom removido a pedido do usuário)
+            # message += "Use o Cupom: MODAMELI 📌\n"
 
-            message += f"📦 <b>{deal.store or 'Oferta Online'}</b>\n"
+            # Linha 5: Link
+            # Exibe Loja se não for ML padrão
+            if deal.store and "Mercado Livre" not in deal.store:
+                message += f"\n{deal.store}\n"
+            else:
+                message += "\n" # Espaço extra se não tiver loja
+                
             link_url = deal.affiliate_url or deal.url
-            message += f"🔗 <a href='{link_url}'>VER OFERTA</a>"
+            message += f"{link_url}"
             
             # Envio para Canal
             try:
@@ -237,4 +253,26 @@ class TelegramNotifier:
         print("Telegram Bot Listening for commands...")
         await self.app.initialize()
         await self.app.start()
-        await self.app.updater.start_polling()
+        
+        # POLING RESILIENCE LOOP
+        print("🚀 Polling started (Resilient Mode)...")
+        while True:
+            try:
+                # O start_polling do python-telegram-bot roda indefinidamente.
+                # Se ele retornar ou der erro, o loop captura.
+                await self.app.updater.start_polling()
+                
+                # Se start_polling encerrar sem erro (raro), aguarda antes de reiniciar
+                await asyncio.sleep(5) 
+                
+            except Exception as e:
+                print(f"⚠️ Telegram Polling Error (Net/API): {e}")
+                print("⏳ Waiting 10s before reconnecting...")
+                await asyncio.sleep(10) # Cool-down antes de tentar reconectar
+                
+                # Tenta reiniciar o updater se necessário (depende do erro, mas mal não faz)
+                try:
+                    if self.app and self.app.updater.running:
+                        await self.app.updater.stop()
+                except:
+                    pass
